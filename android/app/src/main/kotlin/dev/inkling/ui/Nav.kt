@@ -18,13 +18,14 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import dev.inkling.BuildConfig
 import dev.inkling.service.SetupCheck
 import dev.inkling.spike.SpikeScreen
 import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
-fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
+fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewModel) {
     val nav = rememberNavController()
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -42,12 +43,12 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
                     if (t.done) nav.navigate("done/${t.label}")
                     else ctx.packageManager.getLaunchIntentForPackage(t.packageName)?.let { ctx.startActivity(it) }
                 },
-                onRead = { Toast.makeText(ctx, "Books come next.", Toast.LENGTH_SHORT).show() },
+                onRead = { nav.navigate("shelf") },
                 onGearLongPress = { nav.navigate("pin") },
             )
         }
         composable("done/{label}") { back ->
-            DoneScreen(appLabel = back.arguments?.getString("label") ?: "", onPickBook = { nav.popBackStack() }, onBack = { nav.popBackStack() })
+            DoneScreen(appLabel = back.arguments?.getString("label") ?: "", onPickBook = { nav.navigate("shelf") }, onBack = { nav.popBackStack() })
         }
         composable("pin") {
             val s by parent.state.collectAsState()
@@ -97,6 +98,31 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
                 onSetPin = { parent.setPin(it) },
                 onUnlocked = { nav.popBackStack() },
                 onBack = { nav.popBackStack() },
+            )
+        }
+        composable("shelf") {
+            val rows by reader.shelf.collectAsState()
+            LaunchedEffect(Unit) { reader.loadShelf() }
+            ShelfScreen(rows = rows, onOpen = { nav.navigate("reader/$it") }, onBack = { nav.popBackStack() })
+        }
+        composable("reader/{bookId}") { back ->
+            val s by reader.state.collectAsState()
+            val bookId = back.arguments?.getString("bookId").orEmpty()
+            LaunchedEffect(bookId) { reader.open(bookId) }
+            ReaderScreen(
+                state = s,
+                onBack = { reader.finish(); nav.popBackStack() },
+                onTurn = { reader.turn(it) },
+                onNext = {
+                    val last = (s.book?.pages?.size ?: 1) - 1
+                    // Off the last page is the finish: log it, then back to the shelf.
+                    if (s.page >= last) { reader.finish(); nav.popBackStack() } else reader.turn(1)
+                },
+                onSpeak = { reader.speakLine() },
+                onListen = { reader.listen() },
+                onStopListening = { reader.stopListening() },
+                onReplayChunks = { reader.replayChunks() },
+                onDebugFake = if (BuildConfig.DEBUG) ({ reader.fakeRecognition() }) else null,
             )
         }
         composable("spike") { SpikeScreen(dev.inkling.InklingApp.instance.repo) }

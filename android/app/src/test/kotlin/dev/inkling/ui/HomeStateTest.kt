@@ -47,4 +47,10 @@ class HomeStateTest {
         val s = buildHomeState("Cove", rules, emptyList(), settings, now, 0, 21 * 60)
         assertTrue(s.tiles.all { it.done })
     }
+
+    @Test fun bookCountReadsAsEnglish() {
+        assertEquals("0 books today.", booksTodayLine(0))
+        assertEquals("1 book today.", booksTodayLine(1))
+        assertEquals("3 books today.", booksTodayLine(3))
+    }
 }

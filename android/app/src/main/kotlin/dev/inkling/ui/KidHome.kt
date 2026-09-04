@@ -52,7 +52,7 @@ fun KidHome(state: HomeState, onOpen: (Tile) -> Unit, onRead: () -> Unit, onGear
         }
         Spacer(Modifier.height(12.dp))
         Text("Hi, ${state.childName}.", fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 32.sp, color = InklingColors.Ink)
-        Text("${state.booksToday} books today.", fontFamily = Andika, fontSize = 16.sp, color = InklingColors.Ink2)
+        Text(booksTodayLine(state.booksToday), fontFamily = Andika, fontSize = 16.sp, color = InklingColors.Ink2)
         Spacer(Modifier.height(18.dp))
         LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item(span = { GridItemSpan(2) }) {

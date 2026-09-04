@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A speaker with one sound wave. Stroked so the Icon tint picks the ink color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:pathData="M3,8 v4 h3 l4,3 V5 L6,8 z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7" />
+    <path
+        android:pathData="M13,7 a4,4 0 0 1 0,6"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7" />
+</vector>

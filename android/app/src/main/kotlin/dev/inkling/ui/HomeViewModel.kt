@@ -37,6 +37,9 @@ data class Tile(
 
 data class HomeState(val childName: String = "", val booksToday: Int = 0, val tiles: List<Tile> = emptyList())
 
+/** "1 book today." reads wrong as "1 books today.", and he will notice. */
+fun booksTodayLine(n: Int): String = if (n == 1) "1 book today." else "$n books today."
+
 /** Pure. Turns rules, today's spans, and settings into what the kid sees. */
 fun buildHomeState(
     childName: String, rules: List<AppRule>, spans: List<Span>, settings: Settings,
@@ -71,8 +74,10 @@ class HomeViewModel(private val repo: Repo, private val pm: PackageManager) : Vi
         val tz = TimeZone.getDefault().getOffset(now).toLong()
         val cal = Calendar.getInstance()
         val minuteOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        val spans = repo.spansToday(child.id, Budget.startOfDay(now, tz))
+        val dayStart = Budget.startOfDay(now, tz)
+        val spans = repo.spansToday(child.id, dayStart)
         val base = buildHomeState(child.name, rules, spans, settings, now, tz, minuteOfDay)
+            .copy(booksToday = repo.booksFinishedToday(child.id, dayStart))
         // Icon decoding hits the package manager and rasterizes a drawable, so keep it off the main thread.
         val icons = withContext(Dispatchers.IO) { base.tiles.associate { it.packageName to loadIcon(it.packageName) } }
         _state.value = base.copy(tiles = base.tiles.map { it.copy(icon = icons[it.packageName]) })

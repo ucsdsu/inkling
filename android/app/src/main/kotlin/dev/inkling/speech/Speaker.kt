@@ -13,14 +13,28 @@ import java.util.Locale
  */
 class Speaker(context: Context, private val onReady: (Boolean) -> Unit) {
     private var ready = false
+    private var configured = false
+
+    // The init listener must not touch `tts`: it can fire before the constructor has assigned it.
+    // Language and rate are set on first use instead, when the field is certainly there.
     private val tts: TextToSpeech = TextToSpeech(context) { status ->
         ready = status == TextToSpeech.SUCCESS
-        if (ready) tts.language = Locale.US
         onReady(ready)
     }
 
+    /** The engine, configured, or null when it never came up. */
+    private fun engine(): TextToSpeech? {
+        if (!ready) return null
+        if (!configured) {
+            tts.language = Locale.US
+            tts.setSpeechRate(SPEECH_RATE)
+            configured = true
+        }
+        return tts
+    }
+
     fun speakLine(line: String, onWord: (Int) -> Unit, onDone: () -> Unit) {
-        if (!ready) { onDone(); return }
+        val tts = engine() ?: run { onDone(); return }
         val starts = wordStarts(line)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
@@ -31,13 +45,12 @@ class Speaker(context: Context, private val onReady: (Boolean) -> Unit) {
             override fun onError(utteranceId: String?) { onDone() }
             override fun onStart(utteranceId: String?) {}
         })
-        tts.setSpeechRate(0.85f)
         tts.speak(line, TextToSpeech.QUEUE_FLUSH, Bundle(), "line")
     }
 
     /** "p. e. n. pen": chunks with pauses, then the whole word. Letter names, not phonemes, until we ship phoneme clips. */
     fun speakChunks(chunks: List<String>, word: String, onDone: () -> Unit) {
-        if (!ready) { onDone(); return }
+        val tts = engine() ?: run { onDone(); return }
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onDone(utteranceId: String?) { if (utteranceId == "word") onDone() }
             override fun onError(utteranceId: String?) { onDone() }
@@ -56,5 +69,10 @@ class Speaker(context: Context, private val onReady: (Boolean) -> Unit) {
         var inWord = false
         line.forEachIndexed { i, c -> if (!c.isWhitespace() && !inWord) { out += i; inWord = true } else if (c.isWhitespace()) inWord = false }
         return out
+    }
+
+    private companion object {
+        /** Slow enough for a four-year-old to follow the highlighted word. */
+        const val SPEECH_RATE = 0.85f
     }
 }
