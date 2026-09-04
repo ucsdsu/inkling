@@ -3,6 +3,7 @@ package dev.inkling.ui
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.inkling.books.BookStore
 import dev.inkling.data.InklingDb
 import dev.inkling.data.Pin
 import dev.inkling.data.Repo
@@ -23,7 +24,7 @@ class ParentViewModelPinTest {
     @Before fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         db = Room.inMemoryDatabaseBuilder(ctx, InklingDb::class.java).allowMainThreadQueries().build()
-        vm = ParentViewModel(Repo(db), ctx.packageManager, "dev.inkling")
+        vm = ParentViewModel(Repo(db), ctx.packageManager, "dev.inkling", BookStore(ctx.assets))
     }
     @After fun tearDown() { db.close() }
 

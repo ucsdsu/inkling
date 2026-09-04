@@ -1,7 +1,10 @@
 package dev.inkling.ui
 
+import dev.inkling.books.Book
+import dev.inkling.core.BookHistory
 import dev.inkling.core.Span
 import dev.inkling.data.AppRule
+import dev.inkling.data.TutorAttempt
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -35,5 +38,39 @@ class ParentStateTest {
     @Test fun csvFieldQuotesPlainAndCommaBearingValues() {
         assertEquals("\"hop on pop\"", csvField("hop on pop"))
         assertEquals("\"red, hen\"", csvField("red, hen"))
+    }
+
+    private val hen = Book("short-e-hen", "The Big Red Hen", "cvc-e", "e", List(10) { "The hen is red." })
+    private val fox = Book("short-o-fox", "The Fox on the Log", "cvc-o", "o", List(10) { "The fox is on a log." })
+    private val day = 1_700_000_000_000L
+    private fun attempt(at: Long, missed: String, total: Int, low: Boolean = false) =
+        TutorAttempt(childId = 1, bookId = "short-e-hen", page = 0, transcript = "x", confidence = 0.9f, missed = missed, totalWords = total, lowConfidence = low, at = at)
+
+    @Test fun readingListsEveryBookWithItsHistory() {
+        val r = buildReading(
+            listOf(hen, fox), mapOf("short-e-hen" to BookHistory("short-e-hen", 2, 0.91f)),
+            emptyList(), emptyList(), day,
+        )
+        assertEquals(listOf("finished×2 · 91%", "not started"), r.books.map(::readingRowValue))
+    }
+
+    @Test fun todaysAccuracyIgnoresYesterdayAndUnclearLines() {
+        val r = buildReading(
+            listOf(hen), emptyMap(), listOf("red"),
+            listOf(
+                attempt(day - 1, "red red red", 4),          // yesterday
+                attempt(day + 1, "red", 4),                   // today: 1 of 4 missed
+                attempt(day + 2, "", 4),                      // today: clean
+                attempt(day + 3, "", 4, low = true),          // today: never scored
+            ),
+            day,
+        )
+        assertEquals(2, r.attemptsToday)
+        assertEquals(0.875f, r.accuracyToday!!, 0.001f)
+        assertEquals(listOf("red"), r.missedTwice)
+    }
+
+    @Test fun noAttemptsMeansNoAverage() {
+        assertEquals(null, buildReading(listOf(hen), emptyMap(), emptyList(), emptyList(), day).accuracyToday)
     }
 }

@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
                 HomeViewModel::class.java -> HomeViewModel(repo, packageManager) as T
-                ParentViewModel::class.java -> ParentViewModel(repo, packageManager, packageName) as T
+                ParentViewModel::class.java -> ParentViewModel(repo, packageManager, packageName, BookStore(assets)) as T
                 ReaderViewModel::class.java -> ReaderViewModel(repo, BookStore(assets), applicationContext) as T
                 else -> throw IllegalArgumentException("Unknown ViewModel $modelClass")
             }

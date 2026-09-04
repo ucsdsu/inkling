@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,7 +75,7 @@ fun ParentScreen(
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Today", "Apps", "Rules").forEach { t ->
+            listOf("Today", "Reading", "Apps", "Rules").forEach { t ->
                 Box(
                     Modifier.border(1.5.dp, if (tab == t) InklingColors.Ink else InklingColors.Ink3, RoundedCornerShape(14.dp))
                         .background(if (tab == t) InklingColors.Paper2 else InklingColors.Paper, RoundedCornerShape(14.dp))
@@ -85,6 +86,7 @@ fun ParentScreen(
         Spacer(Modifier.height(12.dp))
         when (tab) {
             "Today" -> TodayTab(state)
+            "Reading" -> ReadingTab(state.reading)
             "Apps" -> AppsTab(state, onApp)
             "Rules" -> RulesTab(s.deviceCeilingMinutes, onCeiling, onChangePin, onSpeechTest, onExportSpike)
         }
@@ -107,6 +109,25 @@ private fun TodayTab(state: ParentState) {
                 Text("${r.minutes}", Modifier.width(44.dp), fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End)
             }
         }
+    }
+}
+
+@Composable
+private fun ReadingTab(r: ReadingState) {
+    Column {
+        Text("LAST BOOKS", fontSize = 11.sp, color = InklingColors.Ink2)
+        r.books.forEach { b -> KeyValue(b.title, readingRowValue(b)) }
+        Spacer(Modifier.height(12.dp))
+        Text("WORDS HE MISSED TWICE", fontSize = 11.sp, color = InklingColors.Ink2)
+        Text(
+            if (r.missedTwice.isEmpty()) "none yet" else r.missedTwice.joinToString(" · "),
+            fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = InklingColors.Ink,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("READ-ALOUD ATTEMPTS TODAY", fontSize = 11.sp, color = InklingColors.Ink2)
+        KeyValue("Lines he read", "${r.attemptsToday}")
+        KeyValue("Average accuracy", r.accuracyToday?.let { "${Math.round(it * 100)}%" } ?: "—")
     }
 }
 
