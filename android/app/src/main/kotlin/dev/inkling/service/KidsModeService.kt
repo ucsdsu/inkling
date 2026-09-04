@@ -13,9 +13,11 @@ import dev.inkling.core.Budget
 import dev.inkling.core.Rule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,29 +31,45 @@ import java.util.TimeZone
  */
 class KidsModeService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    /** Window events and the minute cap re-check both call handle(). One at a time. */
+    /** Window events and the ticker both evaluate. One at a time, and lastPkg/warnedFor are only
+     *  ever touched while this is held. */
     private val gate = Mutex()
     private var lastPkg: String? = null
     private val warnedFor = mutableSetOf<String>()
     private var warnedDay: Long = 0
     @Volatile private var overlaySuppressUntil: Long = 0
+    private var ticker: Job? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         // The service was unbound while an app was in front. That span is stale.
         scope.launch { InklingApp.instance.repo.closeStaleSpans(System.currentTimeMillis()) }
+        ticker = scope.launch {
+            while (isActive) {
+                delay(ServiceState.TICK_MS)
+                gate.withLock { lastPkg?.let { evaluate(it, openSpan = false) } }
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (ServiceState.ignoreEvent(pkg, packageName, overlaySuppressUntil, System.currentTimeMillis())) return
-        if (pkg == lastPkg) return
-        lastPkg = pkg
-        scope.launch { handle(pkg) }
+        scope.launch { onForeground(pkg) }
     }
 
-    private suspend fun handle(pkg: String) = gate.withLock {
+    private suspend fun onForeground(pkg: String) = gate.withLock {
+        if (pkg == lastPkg) return@withLock
+        lastPkg = pkg
+        evaluate(pkg, openSpan = true)
+    }
+
+    /**
+     * The one evaluation path. Callers hold [gate]. [openSpan] is false for the ticker: the app
+     * never left the front, so its span is already open and must keep running.
+     */
+    private suspend fun evaluate(pkg: String, openSpan: Boolean) {
         val repo = InklingApp.instance.repo
         val child = repo.ensureChild()
         val s = repo.settings(child.id)
@@ -65,33 +83,22 @@ class KidsModeService : AccessibilityService() {
 
         // Log first, so the span that just ended is counted.
         val tracked = rules.any { it.packageName == pkg && it.enabled }
-        if (tracked) repo.openSpanIfChanged(child.id, pkg, now) else repo.closeOpenSpan(now)
+        if (openSpan) { if (tracked) repo.openSpanIfChanged(child.id, pkg, now) else repo.closeOpenSpan(now) }
 
         val spans = repo.spansToday(child.id, dayStart)
         val snap = Snapshot(s.kidsModeOn, rules, s.deviceCeilingMinutes, s.warningMinutes, s.quietStartMinute, s.quietEndMinute)
-        val (action, _) = ServiceState.onForeground(pkg, packageName, snap, spans, now, zone, minuteOfDay, warnedFor)
+        val (action, _) = if (openSpan) {
+            ServiceState.onForeground(pkg, packageName, snap, spans, now, zone, minuteOfDay, warnedFor)
+        } else {
+            ServiceState.onTick(pkg, packageName, snap, spans, now, zone, minuteOfDay, warnedFor)
+        }
         when (action) {
             is Action.SendHome -> withContext(Dispatchers.Main) { sendHome() }
             is Action.Warn -> {
                 warnedFor += pkg
                 withContext(Dispatchers.Main) { showWarning(action.minutesLeft) }
-                // Keep the chain alive: the warning fires before the cap, so this is exactly the
-                // window where the next re-check matters.
-                if (tracked) scheduleCapCheck(pkg)
             }
-            Action.None -> if (tracked) scheduleCapCheck(pkg)
-        }
-    }
-
-    /**
-     * Re-evaluates once a minute while a tracked app stays in front, so caps fire mid-session.
-     * lastPkg is left alone: clearing it made the very next window event for the same app look
-     * like a change, and nothing ever restored it, so the chain died after one pass.
-     */
-    private fun scheduleCapCheck(pkg: String) {
-        scope.launch {
-            delay(60_000)
-            if (lastPkg == pkg) handle(pkg)
+            Action.None -> {}
         }
     }
 
@@ -121,5 +128,9 @@ class KidsModeService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
-    override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    override fun onDestroy() {
+        ticker?.cancel()
+        scope.cancel()
+        super.onDestroy()
+    }
 }

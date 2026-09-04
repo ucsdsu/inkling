@@ -43,6 +43,22 @@ class ServiceStateTest {
     }
 
     @Test
+    fun tickAtCapSendsHome() {
+        // Nothing new happened: the child never left the app, the minutes just ran out. The ticker
+        // re-evaluates the app already in front and must reach the same verdict a switch would.
+        val spans = listOf(Span("com.chess", now - 30 * minute, null))
+        val (a, v) = ServiceState.onTick("com.chess", "dev.inkling", snap, spans, now, 0, 12 * 60, setOf("com.chess"))
+        assertEquals(Action.SendHome, a); assertEquals(Verdict.BLOCK_CAPPED, v)
+    }
+
+    @Test
+    fun tickUnderCapDoesNothing() {
+        val spans = listOf(Span("com.chess", now - 5 * minute, null))
+        val (a, v) = ServiceState.onTick("com.chess", "dev.inkling", snap, spans, now, 0, 12 * 60, setOf("com.chess"))
+        assertEquals(Action.None, a); assertEquals(Verdict.ALLOW, v)
+    }
+
+    @Test
     fun ownWarningOverlayEventIsIgnored() {
         // The overlay is a window in our own package. Handling its event closed the running span
         // and killed the mid-session cap re-check.

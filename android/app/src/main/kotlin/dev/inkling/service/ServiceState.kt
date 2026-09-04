@@ -19,6 +19,9 @@ object ServiceState {
     /** How long after the warning overlay goes up its own window events stay ignored. */
     const val OVERLAY_SUPPRESS_MS = 5_000L
 
+    /** How often the service re-evaluates the app that is already in front. */
+    const val TICK_MS = 30_000L
+
     /**
      * True when a window event must be dropped. The warning overlay is a window in our own
      * package, so posting it raises a window event for [self] while the tracked app is still in
@@ -46,4 +49,14 @@ object ServiceState {
         }
         return Action.None to verdict
     }
+
+    /**
+     * What the ticker does for the app that is already in front. Same decision as a window event,
+     * so a cap reached mid-session fires without the child touching anything. The caller does not
+     * open a span for it: the span is already open.
+     */
+    fun onTick(
+        pkg: String, self: String, snap: Snapshot, spans: List<Span>,
+        now: Long, zone: Long, minuteOfDay: Int, warnedFor: Set<String>,
+    ): Pair<Action, Verdict> = onForeground(pkg, self, snap, spans, now, zone, minuteOfDay, warnedFor)
 }
