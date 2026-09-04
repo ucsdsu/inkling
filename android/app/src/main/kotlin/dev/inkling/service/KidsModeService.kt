@@ -1,7 +1,10 @@
 package dev.inkling.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.WindowManager
@@ -39,10 +42,33 @@ class KidsModeService : AccessibilityService() {
     private var warnedDay: Long = 0
     private var ticker: Job? = null
 
+    /**
+     * A span must not run all night. The screen going off ends the session; unlocking clears
+     * lastPkg so the first window event after wake re-opens a span instead of being swallowed as
+     * "same app as before".
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> scope.launch {
+                    gate.withLock {
+                        InklingApp.instance.repo.closeOpenSpan(System.currentTimeMillis())
+                        lastPkg = null
+                    }
+                }
+                Intent.ACTION_USER_PRESENT -> scope.launch { gate.withLock { lastPkg = null } }
+            }
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         // The service was unbound while an app was in front. That span is stale.
         scope.launch { InklingApp.instance.repo.closeStaleSpans(System.currentTimeMillis()) }
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT) },
+        )
         ticker = scope.launch {
             while (isActive) {
                 delay(ServiceState.TICK_MS)
@@ -127,6 +153,7 @@ class KidsModeService : AccessibilityService() {
 
     override fun onInterrupt() {}
     override fun onDestroy() {
+        runCatching { unregisterReceiver(screenReceiver) }
         ticker?.cancel()
         scope.cancel()
         super.onDestroy()
