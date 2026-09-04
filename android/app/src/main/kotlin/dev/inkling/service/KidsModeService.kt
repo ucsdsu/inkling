@@ -17,6 +17,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.TimeZone
@@ -27,6 +29,8 @@ import java.util.TimeZone
  */
 class KidsModeService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Window events and the minute cap re-check both call handle(). One at a time. */
+    private val gate = Mutex()
     private var lastPkg: String? = null
     private val warnedFor = mutableSetOf<String>()
     private var warnedDay: Long = 0
@@ -45,7 +49,7 @@ class KidsModeService : AccessibilityService() {
         scope.launch { handle(pkg) }
     }
 
-    private suspend fun handle(pkg: String) {
+    private suspend fun handle(pkg: String) = gate.withLock {
         val repo = InklingApp.instance.repo
         val child = repo.ensureChild()
         val s = repo.settings(child.id)

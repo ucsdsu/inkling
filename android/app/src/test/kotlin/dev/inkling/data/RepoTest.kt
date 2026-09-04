@@ -3,6 +3,9 @@ package dev.inkling.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.inkling.core.Budget
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -81,6 +84,17 @@ class RepoTest {
         repo.closeStaleSpans(now)
         assertEquals(now, repo.spansToday(c.id, 0).first { it.packageName == "com.chess" }.endedAt)
         Unit
+    }
+
+    @Test fun concurrentOpenSpansLeaveExactlyOneOpen() = runBlocking {
+        val c = repo.ensureChild()
+        val pkgs = listOf("com.chess", "com.hangman")
+        coroutineScope {
+            repeat(20) { i ->
+                launch(Dispatchers.IO) { repo.openSpan(c.id, pkgs[i % 2], 1_000L + i) }
+            }
+        }
+        assertEquals(1, repo.spansToday(c.id, 0).count { it.endedAt == null })
     }
 
     @Test fun rulesUpsertByPackage() = runBlocking {

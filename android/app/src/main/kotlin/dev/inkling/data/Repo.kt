@@ -1,5 +1,6 @@
 package dev.inkling.data
 
+import androidx.room.withTransaction
 import dev.inkling.core.Budget
 import dev.inkling.core.Span
 import java.security.MessageDigest
@@ -27,9 +28,10 @@ class Repo(private val db: InklingDb) {
         if (existing == null) db.rules().insert(r) else db.rules().update(r.copy(id = existing.id))
     }
 
-    suspend fun openSpan(childId: Long, pkg: String, now: Long) {
-        closeOpenSpan(now)
+    suspend fun openSpan(childId: Long, pkg: String, now: Long) = db.withTransaction {
+        closeOpenSpanInternal(now)
         db.usage().insert(UsageEvent(childId = childId, packageName = pkg, startedAt = now, endedAt = null))
+        Unit
     }
 
     /**
@@ -37,21 +39,26 @@ class Repo(private val db: InklingDb) {
      * handle() again for the same app every minute; without this each pass would split the session
      * into one-minute spans and lose the seconds in between.
      */
-    suspend fun openSpanIfChanged(childId: Long, pkg: String, now: Long) {
+    suspend fun openSpanIfChanged(childId: Long, pkg: String, now: Long) = db.withTransaction {
         val open = db.usage().open()
-        if (open.isNotEmpty() && open.all { it.packageName == pkg }) return
-        openSpan(childId, pkg, now)
+        if (open.isNotEmpty() && open.all { it.packageName == pkg }) return@withTransaction
+        closeOpenSpanInternal(now)
+        db.usage().insert(UsageEvent(childId = childId, packageName = pkg, startedAt = now, endedAt = null))
+        Unit
     }
 
     /**
      * Closes every span left open by a crash, a reboot, or an unbound service, capping each at
      * [Budget.MAX_SPAN_MS] past its start. Run at service connect and at app start.
      */
-    suspend fun closeStaleSpans(now: Long) {
+    suspend fun closeStaleSpans(now: Long) = db.withTransaction {
         for (e in db.usage().open()) db.usage().update(e.copy(endedAt = minOf(now, e.startedAt + Budget.MAX_SPAN_MS)))
     }
 
-    suspend fun closeOpenSpan(now: Long) {
+    suspend fun closeOpenSpan(now: Long) = db.withTransaction { closeOpenSpanInternal(now) }
+
+    /** Caller must already hold the transaction. */
+    private suspend fun closeOpenSpanInternal(now: Long) {
         for (e in db.usage().open()) db.usage().update(e.copy(endedAt = now))
     }
 
