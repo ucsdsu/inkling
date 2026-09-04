@@ -30,6 +30,9 @@ data class ParentState(
     val loaded: Boolean = false,
 )
 
+/** Quotes one CSV field. A double quote inside the value is doubled, per RFC 4180. */
+fun csvField(s: String): String = "\"" + s.replace("\"", "\"\"") + "\""
+
 fun buildToday(rules: List<AppRule>, spans: List<Span>, now: Long, zone: Long): Pair<List<TodayRow>, Int> {
     val rows = rules.filter { it.enabled }
         .map { TodayRow(it.label, Budget.usedMinutesToday(spans, it.packageName, now, zone)) }
@@ -99,7 +102,9 @@ class ParentViewModel(private val repo: Repo, private val pm: PackageManager, pr
 
     suspend fun spikeCsv(): String = buildString {
         append("at,expected,transcript,confidence,flagged,verdict\n")
-        for (r in repo.spikes()) append("${r.at},\"${r.expected}\",\"${r.transcript}\",${r.confidence},\"${r.flagged}\",${r.verdict}\n")
+        for (r in repo.spikes()) {
+            append("${r.at},${csvField(r.expected)},${csvField(r.transcript)},${r.confidence},${csvField(r.flagged)},${r.verdict}\n")
+        }
     }
 
     private fun update(f: (Settings) -> Settings) = viewModelScope.launch {

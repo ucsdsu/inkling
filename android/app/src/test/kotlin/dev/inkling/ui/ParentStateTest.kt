@@ -27,4 +27,13 @@ class ParentStateTest {
         val (rows, total) = buildToday(rules, emptyList(), now, 0)
         assertEquals(2, rows.size); assertEquals(0, total)
     }
+
+    @Test fun csvFieldDoublesEmbeddedQuotes() {
+        assertEquals("\"he said \"\"hop\"\"\"", csvField("he said \"hop\""))
+    }
+
+    @Test fun csvFieldQuotesPlainAndCommaBearingValues() {
+        assertEquals("\"hop on pop\"", csvField("hop on pop"))
+        assertEquals("\"red, hen\"", csvField("red, hen"))
+    }
 }
