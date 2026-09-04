@@ -1,0 +1,868 @@
+<title>Inkling Kids Mode Simulator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bench-bg: #e9e6df;
+    --bench-panel: #f6f4ef;
+    --bench-ink: #1f1d1a;
+    --bench-muted: #6b665c;
+    --bench-line: #cfcabe;
+    --bench-accent: #2f6f6a;
+    --bench-accent-ink: #ffffff;
+    --bench-warn: #a3552b;
+    /* Device screen palette: Kaleido 3 colour e-ink. Muted on purpose. */
+    --paper: #edebe6;
+    --paper-2: #dcd9d2;
+    --ink: #17160f;
+    --ink-2: #5a574f;
+    --ink-3: #9a968c;
+    --ecolor-teal: #7aa59f;
+    --ecolor-ochre: #c9a66b;
+    --ecolor-rust: #b8776a;
+    --ecolor-moss: #8fa574;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bench-bg: #1c1b18;
+      --bench-panel: #26241f;
+      --bench-ink: #ecE8df;
+      --bench-muted: #a49f93;
+      --bench-line: #3b382f;
+      --bench-accent: #7fb8b2;
+      --bench-accent-ink: #14201f;
+      --bench-warn: #d9895f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bench-bg: #1c1b18;
+    --bench-panel: #26241f;
+    --bench-ink: #ece8df;
+    --bench-muted: #a49f93;
+    --bench-line: #3b382f;
+    --bench-accent: #7fb8b2;
+    --bench-accent-ink: #14201f;
+    --bench-warn: #d9895f;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bench-bg);
+    color: var(--bench-ink);
+    font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  a { color: var(--bench-accent); }
+  .bench {
+    display: grid;
+    grid-template-columns: 520px minmax(320px, 560px);
+    gap: 32px;
+    padding: 28px 32px 48px;
+    justify-content: center;
+    align-items: start;
+  }
+  @media (max-width: 920px) {
+    .bench { grid-template-columns: 1fr; padding: 16px; }
+  }
+
+  /* ---------- Device ---------- */
+  .device-wrap { position: sticky; top: 20px; }
+  .device {
+    width: 520px;
+    max-width: 100%;
+    background: #2b2a27;
+    border-radius: 22px;
+    padding: 26px 20px 34px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.28), inset 0 0 0 1px #3e3c37;
+  }
+  .screen {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1264 / 1680;
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+    font-family: "Andika", "Verdana", sans-serif;
+    border-radius: 3px;
+    /* subtle paper texture */
+    background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+  .flash {
+    position: absolute; inset: 0; pointer-events: none;
+    background: #000; opacity: 0; z-index: 50;
+  }
+  .flash.on { animation: einkflash 260ms steps(1, end) forwards; }
+  @keyframes einkflash {
+    0% { opacity: 1; background: #000; }
+    45% { opacity: 1; background: #fff; }
+    70% { opacity: 1; background: #000; }
+    100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
+  .view { position: absolute; inset: 0; display: none; flex-direction: column; padding: 22px 24px; }
+  .view.active { display: flex; }
+  .device-label {
+    text-align: center; color: #8d8a83; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; margin-top: 16px; font-family: "IBM Plex Mono", monospace;
+  }
+
+  /* status strip (kid mode hides Android's; we draw our own tiny one) */
+  .strip {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--ink-2); font-family: "IBM Plex Mono", monospace;
+    margin-bottom: 14px;
+  }
+  .strip .gear {
+    width: 26px; height: 26px; border: 1.5px solid var(--ink-3); border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer; color: var(--ink-2); font-size: 13px;
+  }
+
+  /* ---------- Kid home ---------- */
+  .hello { font-size: 30px; font-weight: 700; margin: 0 0 2px; line-height: 1.1; }
+  .sub { font-size: 15px; color: var(--ink-2); margin: 0 0 18px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tile {
+    border: 2px solid var(--ink); border-radius: 10px; padding: 14px 12px 12px;
+    cursor: pointer; background: var(--paper); position: relative;
+    display: flex; flex-direction: column; gap: 6px; min-height: 118px;
+  }
+  .tile.big { grid-column: 1 / -1; min-height: 132px; }
+  .tile:focus-visible { outline: 3px solid var(--ecolor-teal); outline-offset: 2px; }
+  .tile .glyph { width: 40px; height: 40px; }
+  .tile .name { font-size: 22px; font-weight: 700; line-height: 1.05; }
+  .tile .meta { font-size: 12px; color: var(--ink-2); font-family: "IBM Plex Mono", monospace; }
+  .tile.done { border-style: dashed; border-color: var(--ink-3); color: var(--ink-3); cursor: default; }
+  .tile.done .name { color: var(--ink-3); }
+  .budget { height: 7px; background: var(--paper-2); border-radius: 4px; overflow: hidden; margin-top: auto; }
+  .budget > i { display: block; height: 100%; background: var(--ink); }
+  .tile.done .budget > i { background: var(--ink-3); }
+  .stars { display: flex; gap: 4px; margin-top: 6px; }
+  .star { width: 16px; height: 16px; }
+
+  /* ---------- Shelf ---------- */
+  .h2 { font-size: 24px; font-weight: 700; margin: 0 0 10px; }
+  .back { font-size: 15px; color: var(--ink-2); cursor: pointer; margin-bottom: 8px; font-family: "IBM Plex Mono", monospace; }
+  .books { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .book {
+    display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: center;
+    padding: 8px 10px; border: 1.5px solid var(--ink-2); border-radius: 8px; cursor: pointer;
+  }
+  .book .cover { width: 46px; height: 60px; border-radius: 3px; display: grid; place-items: center; color: var(--ink); font-weight: 700; font-size: 18px; }
+  .book .t { font-size: 17px; font-weight: 700; line-height: 1.1; }
+  .book .a { font-size: 12px; color: var(--ink-2); }
+  .pill { font-size: 11px; font-family: "IBM Plex Mono", monospace; padding: 3px 8px; border-radius: 12px; border: 1.5px solid var(--ink); white-space: nowrap; }
+  .pill.right { background: var(--ecolor-moss); border-color: transparent; }
+  .pill.stretch { background: var(--ecolor-ochre); border-color: transparent; }
+  .pill.easy { background: var(--paper-2); border-color: transparent; color: var(--ink-2); }
+  .pill.new { background: var(--ecolor-teal); border-color: transparent; }
+
+  /* ---------- Reader ---------- */
+  .page {
+    flex: 1; border: 1.5px solid var(--ink-3); border-radius: 6px; padding: 18px;
+    display: flex; flex-direction: column; justify-content: space-between; position: relative;
+  }
+  .page-art { flex: 1; display: grid; place-items: center; }
+  .page-text { font-size: 30px; line-height: 1.35; font-weight: 400; margin: 0; }
+  .page-text b { font-weight: 700; }
+  .tapzone { position: absolute; top: 0; bottom: 0; width: 38%; cursor: pointer; }
+  .tapzone.l { left: 0; } .tapzone.r { right: 0; }
+  .readbar { display: flex; gap: 10px; margin-top: 12px; }
+  .rbtn {
+    flex: 1; border: 2px solid var(--ink); border-radius: 10px; padding: 12px 8px; text-align: center;
+    font-size: 17px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .rbtn.filled { background: var(--ink); color: var(--paper); }
+  .pgnum { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; text-align: center; margin-top: 8px; }
+
+  /* ---------- Tutor ---------- */
+  .tutor-text { font-size: 30px; line-height: 1.45; margin: 0; }
+  .w { padding: 0 2px; border-radius: 4px; }
+  .w.ok { }
+  .w.miss { background: var(--ecolor-ochre); box-shadow: 0 0 0 2px var(--ecolor-ochre); }
+  .w.now { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; }
+  #mic.live { background: var(--ecolor-rust); border-color: transparent; }
+  .coach {
+    margin-top: 10px; border: 2px solid var(--ink); border-radius: 12px; padding: 10px 14px; font-size: 17px; line-height: 1.35;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .coach.good { background: var(--ecolor-moss); border-color: transparent; justify-content: space-between; font-weight: 700; }
+  .coach .chunks { display: flex; gap: 6px; }
+  .chunk { border: 2px solid var(--ink); border-radius: 8px; padding: 4px 10px; font-size: 24px; font-weight: 700; }
+  .chunk.hi { background: var(--ecolor-teal); }
+  .screen.color .tile .glyph { background: var(--tint); border-radius: 10px; padding: 6px; }
+  .screen.color .tile.big { border-color: var(--ecolor-rust); }
+  .screen.color .budget > i { background: var(--ecolor-teal); }
+  .allbooks { text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--ink-2); padding: 8px; border: 1.5px dashed var(--ink-3); border-radius: 8px; cursor: pointer; }
+  .approw { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--paper-2); }
+  .approw .nm { font-weight: 500; }
+  .approw .nm small { display: block; font-weight: 400; color: var(--ink-2); font-size: 11px; }
+  .approw.off .nm, .approw.off .stepper { color: var(--ink-3); }
+  .sw.sm { width: 40px; height: 22px; border-radius: 11px; }
+  .sw.sm::after { width: 14px; height: 14px; top: 2px; left: 2px; }
+  .sw.sm.on::after { left: 20px; }
+
+  /* ---------- Onboarding ---------- */
+  .ob { font-family: "IBM Plex Sans", sans-serif; }
+  .ob .h2 { font-family: "IBM Plex Sans", sans-serif; font-size: 22px; }
+  .ob .step { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-2); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+  .field { border-bottom: 2px solid var(--ink); padding: 8px 0; font-size: 20px; margin-bottom: 18px; display: flex; justify-content: space-between; }
+  .field small { color: var(--ink-3); font-size: 13px; align-self: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip { border: 1.5px solid var(--ink-2); border-radius: 16px; padding: 6px 12px; font-size: 14px; cursor: pointer; }
+  .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .ages { display: flex; gap: 8px; margin-bottom: 18px; }
+  .age { flex: 1; border: 1.5px solid var(--ink-2); border-radius: 8px; padding: 10px 0; text-align: center; font-size: 18px; cursor: pointer; }
+  .age.on { background: var(--ink); color: var(--paper); }
+  .place { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 18px; }
+  .pw { border: 2px solid var(--ink); border-radius: 10px; padding: 18px 0; text-align: center; font-family: "Andika", sans-serif; font-size: 30px; font-weight: 700; }
+  .pw.hard { border-color: var(--ink-3); color: var(--ink-3); }
+  .making { border: 2px dashed var(--ink-2); border-radius: 12px; padding: 14px; font-size: 14px; }
+  .making b { display: block; font-size: 16px; margin-bottom: 4px; }
+  .making .row { display: flex; justify-content: space-between; padding: 4px 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+
+  /* ---------- Parent ---------- */
+  .pin { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 16px; }
+  .dots { display: flex; gap: 14px; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); }
+  .dot.f { background: var(--ink); }
+  .pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; }
+  .key { height: 60px; border: 1.5px solid var(--ink-2); border-radius: 8px; display: grid; place-items: center; font-size: 22px; cursor: pointer; font-family: "IBM Plex Sans", sans-serif; }
+  .parent { font-family: "IBM Plex Sans", sans-serif; }
+  .parent .h2 { font-family: "IBM Plex Sans", sans-serif; font-size: 20px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; border: 2px solid var(--ink); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .toggle-row .lbl { font-weight: 600; font-size: 16px; }
+  .toggle-row .hint { font-size: 12px; color: var(--ink-2); }
+  .sw { width: 54px; height: 30px; border-radius: 15px; border: 2px solid var(--ink); position: relative; cursor: pointer; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); }
+  .sw.on { background: var(--ink); }
+  .sw.on::after { left: 27px; background: var(--paper); }
+  .ptabs { display: flex; gap: 6px; margin-bottom: 12px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+  .ptab { padding: 5px 10px; border: 1.5px solid var(--ink-3); border-radius: 14px; cursor: pointer; color: var(--ink-2); }
+  .ptab.on { border-color: var(--ink); color: var(--ink); background: var(--paper-2); }
+  .pane { display: none; flex-direction: column; gap: 10px; overflow: hidden; }
+  .pane.on { display: flex; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13px; }
+  .kv .k { color: var(--ink-2); }
+  .kv .v { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; }
+  .bar { display: grid; grid-template-columns: 92px 1fr 44px; gap: 8px; align-items: center; font-size: 13px; }
+  .bar .track { height: 10px; background: var(--paper-2); border-radius: 5px; overflow: hidden; }
+  .bar .track > i { display: block; height: 100%; background: var(--ink); }
+  .bar .n { font-family: "IBM Plex Mono", monospace; text-align: right; font-variant-numeric: tabular-nums; }
+  .bar.over .track > i { background: var(--ecolor-rust); }
+  .sec { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); font-family: "IBM Plex Mono", monospace; margin-top: 6px; }
+  .phon { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ph { border: 1.5px solid var(--ink-3); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: flex; justify-content: space-between; }
+  .ph.m { border-color: var(--ink); background: var(--paper-2); }
+  .ph.w { border-color: var(--ecolor-ochre); background: var(--ecolor-ochre); }
+  .ph small { font-family: "IBM Plex Mono", monospace; color: var(--ink-2); }
+  .rec { border: 1.5px solid var(--ink); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .rec b { display: block; font-size: 14px; }
+  .rec .why { color: var(--ink-2); }
+  .setrow { display: grid; grid-template-columns: 1fr auto; align-items: center; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--paper-2); }
+  .stepper { display: inline-flex; border: 1.5px solid var(--ink); border-radius: 6px; overflow: hidden; font-family: "IBM Plex Mono", monospace; }
+  .stepper span { padding: 3px 10px; }
+  .stepper button { border: 0; background: var(--paper-2); width: 28px; cursor: pointer; font-size: 14px; }
+
+  /* ---------- Workbench panel ---------- */
+  .panel { background: var(--bench-panel); border: 1px solid var(--bench-line); border-radius: 12px; padding: 20px 22px; }
+  .panel h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .panel .lede { color: var(--bench-muted); margin: 0 0 16px; max-width: 60ch; }
+  .nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .nav button {
+    font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 14px; cursor: pointer;
+    border: 1px solid var(--bench-line); background: transparent; color: var(--bench-ink);
+  }
+  .nav button.on { background: var(--bench-accent); color: var(--bench-accent-ink); border-color: var(--bench-accent); }
+  .opts { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; font-size: 13px; color: var(--bench-muted); }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .note { display: none; }
+  .note.on { display: block; }
+  .note h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+  .note p { margin: 0 0 10px; max-width: 62ch; }
+  .note ul { margin: 0 0 10px; padding-left: 18px; max-width: 62ch; }
+  .note li { margin-bottom: 4px; }
+  .note .q { border-left: 3px solid var(--bench-warn); padding: 6px 12px; margin: 12px 0 0; color: var(--bench-ink); background: color-mix(in srgb, var(--bench-warn) 8%, transparent); }
+  .note .q b { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--bench-warn); margin-bottom: 4px; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+  .foot { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bench-line); color: var(--bench-muted); font-size: 12px; max-width: 62ch; }
+</style>
+
+<div class="bench">
+  <div class="device-wrap">
+    <div class="device">
+      <div class="screen" id="screen">
+        <div class="flash" id="flash"></div>
+
+        <!-- ===== KID HOME ===== -->
+        <section class="view active" data-view="home">
+          <div class="strip">
+            <span></span>
+            <span>▮▮▮▯</span>
+            <span class="gear" title="Hold for parent" data-go="pin">⚙</span>
+          </div>
+          <h1 class="hello">Hi, Cove.</h1>
+          <p class="sub">2 books today.</p>
+          <div class="tiles">
+            <div class="tile big" tabindex="0" data-go="shelf">
+              <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 8h11c2 0 3 1 3 3v22c0-2-1-3-3-3H6zM34 8H23c-2 0-3 1-3 3v22c0-2 1-3 3-3h11z"/></svg>
+              <div class="name">Read</div>
+              <div class="meta">Next: The Big Red Hen</div>
+            </div>
+            <div class="tile" tabindex="0" data-app="chess">
+              <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 34h16M14 30h12l-2-8h-8zM16 22c-3-3-4-7-2-11 3 0 6 2 8 5 2-3 5-5 8-5 2 4 1 8-2 11"/></svg>
+              <div class="name">Chess</div>
+              <div class="meta" data-meta="chess"></div>
+              <div class="budget"><i data-bar="chess" style="width:40%"></i></div>
+            </div>
+            <div class="tile" tabindex="0" data-app="chessworld">
+              <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="20" cy="20" r="14"/><path d="M6 20h28M20 6c5 5 5 23 0 28M20 6c-5 5-5 23 0 28"/></svg>
+              <div class="name">Chess World</div>
+              <div class="meta" data-meta="chessworld"></div>
+              <div class="budget"><i data-bar="chessworld" style="width:0%"></i></div>
+            </div>
+            <div class="tile" tabindex="0" data-app="hangman">
+              <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M8 34V8h14v6M8 12h6"/><text x="17" y="31" font-size="14" font-family="Andika" fill="currentColor" stroke="none">A_T</text></svg>
+              <div class="name">Hangman</div>
+              <div class="meta" data-meta="hangman"></div>
+              <div class="budget"><i data-bar="hangman" style="width:40%"></i></div>
+            </div>
+            <div class="tile" tabindex="0" data-app="hoopla">
+              <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M8 24v-4a12 12 0 0124 0v4M8 24h5v8H8zM27 24h5v8h-5z"/></svg>
+              <div class="name">Hoopla</div>
+              <div class="meta" data-meta="hoopla"></div>
+              <div class="budget"><i data-bar="hoopla" style="width:55%"></i></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== DONE FOR TODAY ===== -->
+        <section class="view" data-view="done">
+          <div class="strip"><span></span><span>▮▮▮▯</span><span class="gear" data-go="pin">⚙</span></div>
+          <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:14px;">
+            <svg width="120" height="120" viewBox="0 0 40 40" fill="none" stroke="#17160f" stroke-width="1.8"><circle cx="20" cy="20" r="15"/><path d="M20 10v10l6 4"/></svg>
+            <div style="font-size:28px; font-weight:700; line-height:1.15;">Chess is done<br>for today.</div>
+            <div style="font-size:17px; color:var(--ink-2); max-width:24ch;">It comes back tomorrow. Want to read one more book?</div>
+            <div class="rbtn filled" style="width:70%; margin-top:8px;" data-go="shelf">Pick a book</div>
+            <div class="rbtn" style="width:70%;" data-go="home">Back</div>
+          </div>
+        </section>
+
+        <!-- ===== SHELF ===== -->
+        <section class="view" data-view="shelf">
+          <div class="strip"><span class="back" data-go="home">‹ Home</span><span>▮▮▮▯</span><span class="gear" data-go="pin">⚙</span></div>
+          <h2 class="h2">Your books</h2>
+          <div class="books">
+            <div class="book" data-go="reader">
+              <div class="cover" style="background:var(--ecolor-rust)">H</div>
+              <div><div class="t">The Big Red Hen</div><div class="a">Decodable · short e, -en words · 14 pages</div></div>
+              <span class="pill right">Just right</span>
+            </div>
+            <div class="book" data-go="reader">
+              <div class="cover" style="background:var(--ecolor-teal)">F</div>
+              <div><div class="t">Fish Out of Water</div><div class="a">Helen Palmer · 64 pages · 3 of 5 read</div></div>
+              <span class="pill stretch">Stretch</span>
+            </div>
+            <div class="book" data-go="reader">
+              <div class="cover" style="background:var(--ecolor-ochre)">P</div>
+              <div><div class="t">Pete the Cat: Rocking in My School Shoes</div><div class="a">Litwin · read 4 times</div></div>
+              <span class="pill easy">Easy</span>
+            </div>
+            <div class="book" data-go="reader">
+              <div class="cover" style="background:var(--ecolor-moss)">S</div>
+              <div><div class="t">Ship in the Shop</div><div class="a">Decodable · sh digraph · new this week</div></div>
+              <span class="pill new">Try it</span>
+            </div>
+            <div class="book" data-go="reader">
+              <div class="cover" style="background:var(--paper-2)">D</div>
+              <div><div class="t">Hop on Pop</div><div class="a">Dr. Seuss · read 9 times</div></div>
+              <span class="pill easy">Easy</span>
+            </div>
+            <div class="allbooks" data-all="1">All 31 books ›</div>
+          </div>
+        </section>
+
+        <!-- ===== READER ===== -->
+        <section class="view" data-view="reader">
+          <div class="strip"><span class="back" data-go="shelf">‹ Books</span><span>The Big Red Hen</span><span class="gear" data-go="pin">⚙</span></div>
+          <div class="page">
+            <div class="tapzone l" title="Previous page" data-page="-1"></div>
+            <div class="tapzone r" title="Next page" data-page="1"></div>
+            <div class="page-art">
+              <svg width="200" height="150" viewBox="0 0 200 150" fill="none" stroke="#17160f" stroke-width="2.2">
+                <ellipse cx="100" cy="95" rx="52" ry="34" fill="#b8776a"/>
+                <circle cx="142" cy="66" r="16" fill="#b8776a"/>
+                <path d="M156 66l14 4-14 4z" fill="#c9a66b"/>
+                <path d="M138 50l4-10 6 9 5-9 3 11" fill="#b8776a"/>
+                <circle cx="146" cy="63" r="2" fill="#17160f"/>
+                <path d="M84 128v14M112 128v14M78 142h12M106 142h12"/>
+                <path d="M48 95q-14 -20 -4 -36" />
+              </svg>
+            </div>
+            <p class="page-text" id="pagetext">The big red hen sat in the pen.</p>
+          </div>
+          <div class="readbar">
+            <div class="rbtn filled" id="mic">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="6" height="10" rx="3"/><path d="M4 9a6 6 0 0012 0M10 15v3"/></svg>
+              <span id="miclabel">I'll read</span>
+            </div>
+            <div class="rbtn" data-tts="1">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8v4h3l4 3V5L6 8zM13 7a4 4 0 010 6M15 5a7 7 0 010 10"/></svg>
+              Read to me
+            </div>
+          </div>
+          <div class="coach" id="coach" hidden>
+            <div style="display:flex;align-items:center;gap:8px;"><svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8v4h3l4 3V5L6 8zM13 7a4 4 0 010 6"/></svg><span>Let's sound it out:</span></div>
+            <div class="chunks"><span class="chunk">p</span><span class="chunk hi">e</span><span class="chunk">n</span></div>
+          </div>
+          <div class="coach good" id="coachgood" hidden data-page="1" style="cursor:pointer">
+            <span>Nice reading!</span>
+            <span style="display:flex; align-items:center; gap:8px;">Next page
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13h15M13 6l7 7-7 7"/></svg>
+            </span>
+          </div>
+          <div class="pgnum" id="pgnum">page 3 of 14</div>
+        </section>
+
+        <!-- ===== ONBOARDING 1: profile ===== -->
+        <section class="view ob" data-view="ob1">
+          <div class="strip"><span class="back" data-go="parent">‹ Parent</span><span>New child</span><span></span></div>
+          <div class="step">1 of 3 · about them</div>
+          <h2 class="h2">Who's this for?</h2>
+          <div class="field"><span>Cove</span><small>name</small></div>
+          <div class="step">age</div>
+          <div class="ages"><span class="age">3</span><span class="age on">4</span><span class="age">5</span><span class="age">6</span><span class="age">7+</span></div>
+          <div class="step">what they're into (pick a few)</div>
+          <div class="chips">
+            <span class="chip on">dinosaurs</span><span class="chip">trucks</span><span class="chip on">chess</span><span class="chip">ocean</span>
+            <span class="chip">space</span><span class="chip on">dogs</span><span class="chip">fairies</span><span class="chip">building</span><span class="chip on">bugs</span><span class="chip">cooking</span>
+          </div>
+          <div style="margin-top:auto"><div class="rbtn filled" data-go="ob2">Next ›</div></div>
+        </section>
+
+        <!-- ===== ONBOARDING 2: placement ===== -->
+        <section class="view ob" data-view="ob2">
+          <div class="strip"><span class="back" data-go="ob1">‹ Back</span><span>New child</span><span></span></div>
+          <div class="step">2 of 3 · hand the tablet to Cove</div>
+          <h2 class="h2">Read these words out loud.</h2>
+          <p style="font-size:14px; color:var(--ink-2); margin:0 0 6px;">It listens. It's fine to skip any. This finds a starting shelf, nothing else.</p>
+          <div class="place">
+            <div class="pw">cat</div><div class="pw">hop</div>
+            <div class="pw">pen</div><div class="pw">ship</div>
+            <div class="pw hard">cake</div><div class="pw hard">train</div>
+          </div>
+          <div class="rbtn filled" style="margin-bottom:10px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="6" height="10" rx="3"/><path d="M4 9a6 6 0 0012 0M10 15v3"/></svg> Listening…</div>
+          <div style="margin-top:auto"><div class="rbtn" data-go="ob3">Done ›</div></div>
+        </section>
+
+        <!-- ===== ONBOARDING 3: first shelf ===== -->
+        <section class="view ob" data-view="ob3">
+          <div class="strip"><span></span><span>New child</span><span></span></div>
+          <div class="step">3 of 3 · first shelf</div>
+          <h2 class="h2">Cove starts at short vowels.</h2>
+          <p style="font-size:14px; color:var(--ink-2); margin:0 0 14px;">Read cat, hop, pen. Skipped ship, cake, train. That's a normal 4-year-old. His first shelf:</p>
+          <div class="making">
+            <b>Already on the device</b>
+            <div class="row"><span>12 short-vowel decodables</span><span>starter pack</span></div>
+            <div class="row"><span>Nursery rhymes, 8</span><span>Core Knowledge preschool</span></div>
+            <div class="row"><span>Aesop: The Lion and the Mouse</span><span>Core Knowledge K</span></div>
+          </div>
+          <div class="making" style="margin-top:10px; border-style:solid;">
+            <b>Making 3 books for Cove · needs Wi-Fi</b>
+            <div class="row"><span>Dan the Dog Digs</span><span>dogs · short a, i</span></div>
+            <div class="row"><span>The Bug in the Mud</span><span>bugs · short u</span></div>
+            <div class="row"><span>Rex Can Not Nap</span><span>dinosaurs · short a, e</span></div>
+            <div class="row" style="color:var(--ink-2)"><span>Text now, pictures in about a minute.</span><span>~3¢</span></div>
+          </div>
+          <div style="margin-top:auto"><div class="rbtn filled" data-go="home">Go to Cove's shelf ›</div></div>
+        </section>
+
+        <!-- ===== PIN ===== -->
+        <section class="view" data-view="pin">
+          <div class="strip"><span class="back" data-go="home">‹ Back</span><span>Parent</span><span></span></div>
+          <div class="pin">
+            <div style="font-size:16px; color:var(--ink-2);">Enter parent PIN</div>
+            <div class="dots" id="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div class="pad" id="pad">
+              <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+              <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+              <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+              <div class="key" style="border-color:transparent"></div><div class="key">0</div><div class="key" data-del="1">⌫</div>
+            </div>
+            <div class="mono" style="color:var(--ink-3)">any 4 digits works in the sim</div>
+          </div>
+        </section>
+
+        <!-- ===== PARENT ===== -->
+        <section class="view parent" data-view="parent">
+          <div class="strip"><span class="back" data-go="home">‹ Lock</span><span>Parent</span><span></span></div>
+          <div class="toggle-row">
+            <div>
+              <div class="lbl">Kids mode</div>
+              <div class="hint" id="kidshint">On. Only the 5 apps on the home screen can open.</div>
+            </div>
+            <div class="sw on" id="kidsw" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+          <div class="ptabs">
+            <span class="ptab on" data-tab="today">Today</span>
+            <span class="ptab" data-tab="reading">Reading</span>
+            <span class="ptab" data-tab="next">Next up</span>
+            <span class="ptab" data-tab="apps">Apps</span>
+            <span class="ptab" data-tab="limits">Rules</span>
+          </div>
+
+          <div class="pane on" data-pane="today">
+            <div class="kv">
+              <span class="k">Screen time today</span><span class="v">52 min</span>
+              <span class="k">Reading (of that)</span><span class="v">24 min</span>
+              <span class="k">Books finished</span><span class="v">2</span>
+              <span class="k">Read-aloud attempts</span><span class="v">3 · 91% words</span>
+            </div>
+            <div class="sec">By app</div>
+            <div class="bar"><span>Read</span><div class="track"><i style="width:80%"></i></div><span class="n">24</span></div>
+            <div class="bar"><span>Chess</span><div class="track"><i style="width:40%"></i></div><span class="n">12</span></div>
+            <div class="bar"><span>Hoopla</span><div class="track"><i style="width:33%"></i></div><span class="n">10</span></div>
+            <div class="bar"><span>Hangman</span><div class="track"><i style="width:20%"></i></div><span class="n">6</span></div>
+            <div class="bar"><span>Chess World</span><div class="track"><i style="width:0%"></i></div><span class="n">0</span></div>
+            <div class="sec">This week</div>
+            <div class="kv">
+              <span class="k">Avg screen time / day</span><span class="v">47 min</span>
+              <span class="k">Reading streak</span><span class="v">6 days</span>
+              <span class="k">Books (unique)</span><span class="v">9</span>
+            </div>
+          </div>
+
+          <div class="pane" data-pane="reading">
+            <div class="sec">Phonics map</div>
+            <div class="phon">
+              <div class="ph m"><span>Short vowels (CVC)</span><small>solid</small></div>
+              <div class="ph m"><span>Sight words 1–50</span><small>46/50</small></div>
+              <div class="ph w"><span>Short e</span><small>shaky</small></div>
+              <div class="ph"><span>Digraphs sh ch th</span><small>starting</small></div>
+              <div class="ph"><span>Blends bl st tr</span><small>not yet</small></div>
+              <div class="ph"><span>Silent e (cake)</span><small>not yet</small></div>
+            </div>
+            <div class="sec">Last 7 books</div>
+            <div class="kv">
+              <span class="k">The Big Red Hen</span><span class="v">3 pg · 91%</span>
+              <span class="k">Hop on Pop</span><span class="v">done · 98%</span>
+              <span class="k">Pete: School Shoes</span><span class="v">done · TTS</span>
+              <span class="k">Fish Out of Water</span><span class="v">14 pg · TTS</span>
+              <span class="k">Ship in the Shop</span><span class="v">not started</span>
+              <span class="k">Hop on Pop</span><span class="v">done · 96%</span>
+              <span class="k">Sam and the Map</span><span class="v">done · 88%</span>
+            </div>
+            <div class="sec">Words he missed twice</div>
+            <div class="mono">pen · ten · then · when · went</div>
+          </div>
+
+          <div class="pane" data-pane="next">
+            <div class="rec"><b>Ship in the Shop</b><span class="why">Introduces sh. He's solid on CVC, so one new pattern is the right step. Decodable, 12 pages.</span></div>
+            <div class="rec"><b>Re-read The Big Red Hen</b><span class="why">Short e was 78% yesterday. A second pass usually pushes it past 90.</span></div>
+            <div class="rec"><b>Hoopla: read-along, any Pete the Cat</b><span class="why">Above his decoding level, fine for listening. Counts as reading time, not as a decoded book.</span></div>
+            <div class="rec"><b>Skip for now: Fish Out of Water solo</b><span class="why">Too many blends and silent e. Keep it as a "read to me" book.</span></div>
+          </div>
+
+          <div class="pane" data-pane="apps">
+            <div class="sec">Installed on this device</div>
+            <div class="approw"><span class="nm">Read<small>built in</small></span><span class="mono">no limit</span><span class="sw sm on" data-appsw="1"></span></div>
+            <div class="approw"><span class="nm">Chess<small>chess.com</small></span><span class="stepper"><button>−</button><span>30</span><button>+</button></span><span class="sw sm on" data-appsw="1"></span></div>
+            <div class="approw"><span class="nm">Chess World</span><span class="stepper"><button>−</button><span>20</span><button>+</button></span><span class="sw sm on" data-appsw="1"></span></div>
+            <div class="approw"><span class="nm">Hangman</span><span class="stepper"><button>−</button><span>15</span><button>+</button></span><span class="sw sm on" data-appsw="1"></span></div>
+            <div class="approw"><span class="nm">Hoopla</span><span class="stepper"><button>−</button><span>30</span><button>+</button></span><span class="sw sm on" data-appsw="1"></span></div>
+            <div class="approw off"><span class="nm">YouTube Kids</span><span class="stepper"><button>−</button><span>0</span><button>+</button></span><span class="sw sm" data-appsw="1"></span></div>
+            <div class="approw off"><span class="nm">Khan Academy Kids</span><span class="stepper"><button>−</button><span>0</span><button>+</button></span><span class="sw sm" data-appsw="1"></span></div>
+            <div class="approw off"><span class="nm">Libby</span><span class="stepper"><button>−</button><span>0</span><button>+</button></span><span class="sw sm" data-appsw="1"></span></div>
+            <div class="mono" style="color:var(--ink-3); margin-top:6px;">Switch on = tile on his home screen. Minutes = daily cap.</div>
+          </div>
+
+          <div class="pane" data-pane="limits">
+            <div class="setrow"><span>Whole-device daily ceiling</span><span class="stepper"><button>−</button><span>60 min</span><button>+</button></span></div>
+            <div class="setrow"><span>Warning before a cap</span><span class="mono">2 min</span></div>
+            <div class="setrow"><span>Games unlock after</span><span class="mono">off</span></div>
+            <div class="setrow"><span>Children</span><span class="mono">Cove · <span data-go="ob1" style="cursor:pointer; text-decoration:underline;">+ add child</span></span></div>
+            <div class="setrow"><span>Quiet hours</span><span class="mono">7:30 pm – 7:00 am</span></div>
+            <div class="setrow"><span>Change PIN</span><span class="mono">····</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="device-label">Boox Go Color 7 · 1264×1680 · 7" Kaleido 3</div>
+  </div>
+
+  <!-- ===== WORKBENCH ===== -->
+  <div class="panel">
+    <h1>Inkling kids mode</h1>
+    <p class="lede">Click the device. Every screen is live. Tell me what's wrong with each one.</p>
+    <div class="nav" id="nav">
+      <button data-go="home">Kid home</button>
+      <button data-go="done">Done for today</button>
+      <button data-go="shelf">Shelf</button>
+      <button data-go="reader">Reader + tutor</button>
+      <button data-go="pin">PIN</button>
+      <button data-go="parent">Parent</button>
+      <button data-go="ob1">Onboarding</button>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="optflash" checked> e-ink full refresh flash</label>
+      <label><input type="checkbox" id="optcap"> simulate chess at its daily cap</label>
+      <label><input type="checkbox" id="optcolor"> color accents on home</label>
+    </div>
+
+    <div class="note on" data-note="home">
+      <h2>Kid home</h2>
+      <p>Five things, nothing else. Read is the biggest tile and always first. Games show today's budget as a bar, not a number he can't read yet. "2 books today" is the only count he sees, and it resets tomorrow.</p>
+      <ul>
+        <li>The gear needs a long press in the real app. Here it's a tap.</li>
+        <li>No status bar, no clock he can read, no notifications. Battery shown because he asks.</li>
+        <li>Andika typeface: designed for early readers, single-storey a and g, no confusable I/l.</li>
+      </ul>
+      <ul>
+        <li>Numbers like "12 of 30 min" and the clock are gone from his screen. He can't read them; the bar is the whole message.</li>
+        <li>Stars are gone (Jon's call, and the developmental psychologist's). Games unlock rule is off. Read tile first and biggest is the whole nudge.</li>
+      </ul>
+    </div>
+    <div class="note" data-note="done">
+      <h2>Done for today</h2>
+      <p>The cap doesn't interrupt a game mid-match. It shows up next time he taps the tile. Copy tells him when it's back and offers the one thing we want him to do instead.</p>
+      <div class="q"><b>Open question</b>Do you want a 5-minute warning inside the game, or is the gentle "next time" enough?</div>
+    </div>
+    <div class="note" data-note="shelf">
+      <h2>Shelf</h2>
+      <p>Sorted by "what should he open next," not alphabetically. Each book gets one word: Just right, Stretch, Easy, Try it. That's the five-finger rule made visible: at his level, "just right" means about 1 unknown word in 20.</p>
+      <ul>
+        <li>Decodables (Big Red Hen, Ship in the Shop) are short, pattern-controlled books we can write or generate. Trade books (Seuss, Pete) come from your library as PDFs.</li>
+        <li>"Easy" books stay. Re-reading favorites is where fluency comes from; we just don't push them. But "read 9 times" at 98% can be recitation, not decoding. The phonics map only trusts accuracy on books he hasn't seen before, or on novel lines inside generated decodables.</li>
+        <li>The shelf shows the 5 picks for today. "All books" opens the full library, sorted by level, so he can browse. The picks are the nudge; the library is the freedom.</li>
+      </ul>
+    </div>
+    <div class="note" data-note="reader">
+      <h2>Reader + tutor</h2>
+      <p>One page, two buttons. "Read to me" is TTS with word highlighting. "I'll read" listens right here: tap it, the button turns live with a countdown, read the line, and the result lands on this same page. Tap it to see the simulated miscue on "pen" (short e is his shaky pattern), then tap again for the retry.</p>
+      <ul>
+        <li>The coach never says "wrong." It shows the word in sounds with the tricky one marked. One miscue at a time; 3+ misses and the book quietly moves to "Stretch."</li>
+        <li>The real app stops listening when he stops talking (about 1.5 seconds of silence). The countdown is the ceiling, not the wait. Here it's just a visible stand-in.</li>
+        <li>Offline: on-device speech recognition, then a word diff against the page text. Kid speech is noisy, so only confident misses get flagged.</li>
+        <li>Logged: book, page, seconds, which button, words missed. That's the reading log and the phonics map in one stream.</li>
+      </ul>
+      <ul>
+        <li>Panel changes: "I'll read" is now the primary button and "Read to me" the fallback, so decoding is the default path. The coach speaks the sounds aloud, always. "Almost!" is gone; the coach just sounds the word out. Listening shows no countdown; the real app stops on silence (2.5 to 3 s for a 4-year-old, not 1.5).</li>
+        <li>Third tutor state, not shown here: when the recording is too quiet or the recognizer isn't confident, the coach says "I didn't catch that, try again" and never names a specific word. Guessing a wrong miscue is worse than saying nothing.</li>
+        <li>Typical 4-year-old articulation ("wed" for "red", "fin" for "thin") is not a decoding error and is never flagged.</li>
+        <li>A miss counts toward "too hard" only if it survives the retry, and every miss is logged with a confidence score so you can audit false flags.</li>
+      </ul>
+      <div class="q"><b>The spike before any Kotlin</b>Record Cove reading 20 decodable lines into the Boox mic in a normal room. Run offline recognition plus the diff. If more than 1 in 10 correct reads gets flagged as a miss, the coach needs redesign first.</div>
+    </div>
+    <div class="note" data-note="pin">
+      <h2>PIN</h2>
+      <p>Four digits. Any code works in the sim. In the real app this is also where kids mode gets turned off, so the whole parent side lives behind one gate.</p>
+    </div>
+    <div class="note" data-note="parent">
+      <h2>Parent</h2>
+      <p>One toggle at the top, everything else below it. Today: time by app. Reading: the phonics map and the words he missed twice. Next up: recommendations with the reason attached. Apps: every app installed on the device, one switch to put it on his home screen, one number for the daily cap. Rules: the read-first rule, quiet hours, PIN.</p>
+      <ul>
+        <li>Apps is the whole customization story. Install anything from Play in parent mode, flip it on here. No config files, no chat.</li>
+        <li>The phonics map is the real product. Screen time is table stakes. The homeschool-parent persona said she'd look at the phonics map, the twice-missed words, and Next up, and ignore the minute bars.</li>
+        <li>Rules now has a whole-device daily ceiling (per-app caps alone could stack past 90 minutes), a 2-minute warning inside a game before its cap, and a Children row for a second profile. Profiles are phase 2 but the data model needs them from day 1.</li>
+        <li>Seed data is invented but shaped like a real 4-year-old at the Seuss level: CVC solid, short e wobbly, digraphs next.</li>
+      </ul>
+      <div class="q"><b>Open question</b>Is this enough on-device, or do you want a nightly text/email digest too?</div>
+    </div>
+
+    <div class="note" data-note="ob1">
+      <h2>Onboarding 1: profile</h2>
+      <p>Name, age, a handful of interests as pictures-and-words chips. That's all the AI needs to make his first books. No email, no account, no reading-level dropdown for you to guess at.</p>
+    </div>
+    <div class="note" data-note="ob2">
+      <h2>Onboarding 2: placement</h2>
+      <p>Six words, easy to hard, one per phonics stage: CVC, short e, sh digraph, silent e, vowel team. He reads what he can. The first stage he skips or misses is where the shelf starts. Two minutes, and it's the same speech pipeline as the tutor, so if this works the tutor works.</p>
+    </div>
+    <div class="note" data-note="ob3">
+      <h2>Onboarding 3: first shelf</h2>
+      <p>Two sources. The starter pack ships inside the app: decodables for every stage, plus the Core Knowledge preschool and K read-alouds (nursery rhymes, Mother Goose, Aesop, the poems your kids already gravitate to). Text is tiny; it all fits. Then, on Wi-Fi, three books get generated from his interests at his exact stage. Pictures arrive a minute later.</p>
+      <ul>
+        <li>Generated books are validated by a script before he sees them: every word must be decodable at his stage or on his sight-word list. The model doesn't get to freelance.</li>
+        <li>The "memory file" is per child: phonics map, missed words, books, interests. It's the only thing the model reads when it writes the next book.</li>
+      </ul>
+    </div>
+    <div class="foot">Prototype only. No real speech, no real storage, no e-ink SDK. It exists so you can say "no, not like that" before any Kotlin gets written.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const screen = document.getElementById('screen');
+  const flash = document.getElementById('flash');
+  const optflash = document.getElementById('optflash');
+  const optcap = document.getElementById('optcap');
+  const notes = document.querySelectorAll('.note');
+  const navBtns = document.querySelectorAll('#nav button');
+  let current = 'home';
+  let page = 3;
+  const pages = [
+    'The hen is red.',
+    'The hen is big.',
+    'The big red hen sat in the pen.',
+    'Ten eggs sat in the pen.',
+    'The hen fed the ten.',
+  ];
+
+  function doFlash() {
+    if (!optflash.checked) return;
+    flash.classList.remove('on');
+    void flash.offsetWidth;
+    flash.classList.add('on');
+  }
+
+  function go(view) {
+    if (view === current) return;
+    doFlash();
+    setTimeout(() => {
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+      notes.forEach(n => n.classList.toggle('on', n.dataset.note === view));
+      navBtns.forEach(b => b.classList.toggle('on', b.dataset.go === view));
+      current = view;
+      if (view === 'reader') resetTutor();
+      if (view === 'pin') resetPin();
+    }, optflash.checked ? 180 : 0);
+  }
+  navBtns.forEach(b => b.classList.toggle('on', b.dataset.go === current));
+
+  document.addEventListener('click', e => {
+    const goEl = e.target.closest('[data-go]');
+    if (goEl) {
+      if (goEl.dataset.page) { page = Math.min(pages.length, page + 1); renderPage(); }
+      go(goEl.dataset.go);
+      return;
+    }
+    const app = e.target.closest('[data-app]');
+    if (app) {
+      if (app.classList.contains('done')) { go('done'); return; }
+      alert('Opens ' + app.querySelector('.name').textContent + ' inside kids mode. Back returns here.');
+      return;
+    }
+    const tz = e.target.closest('[data-page]');
+    if (tz && current === 'reader') {
+      page = Math.max(1, Math.min(pages.length, page + Number(tz.dataset.page)));
+      doFlash(); renderPage(); resetTutor();
+    }
+    if (e.target.closest('[data-tts]')) {
+      const t = document.getElementById('pagetext');
+      const words = t.textContent.split(' ');
+      let i = 0;
+      const tick = () => {
+        t.innerHTML = words.map((w, k) => k === i ? '<b>' + w + '</b>' : w).join(' ');
+        i++;
+        if (i < words.length) setTimeout(tick, 420); else setTimeout(() => t.textContent = words.join(' '), 600);
+      };
+      tick();
+    }
+  });
+
+  function renderPage() {
+    document.getElementById('pagetext').textContent = pages[Math.min(page, pages.length) - 1];
+    document.getElementById('pgnum').textContent = 'page ' + page + ' of 14';
+  }
+
+  // Inline tutor on the reader page
+  const mic = document.getElementById('mic');
+  const miclabel = document.getElementById('miclabel');
+  const coach = document.getElementById('coach');
+  const coachgood = document.getElementById('coachgood');
+  const pagetext = document.getElementById('pagetext');
+  let tutorState = 0, timer = null;
+  function resetTutor() {
+    tutorState = 0; clearTimeout(timer);
+    mic.classList.remove('live'); miclabel.textContent = "I'll read";
+    coach.hidden = true; coachgood.hidden = true;
+    pagetext.textContent = pages[Math.min(page, pages.length) - 1];
+  }
+  function listen(seconds, onDone) {
+    let left = seconds;
+    mic.classList.add('live'); miclabel.textContent = 'Listening…';
+    const tick = () => {
+      left--;
+      if (left <= 0) { onDone(); return; }
+      timer = setTimeout(tick, 1000);
+    };
+    timer = setTimeout(tick, 1000);
+  }
+  function showMiss() {
+    mic.classList.remove('live'); miclabel.textContent = 'Try again';
+    const words = pagetext.textContent.split(' ');
+    pagetext.innerHTML = words.map((w, i) => i === words.length - 1 ? '<span class="w miss">' + w + '</span>' : w).join(' ');
+    coach.hidden = false; tutorState = 2;
+  }
+  function showGood() {
+    mic.classList.remove('live'); miclabel.textContent = "I'll read";
+    pagetext.textContent = pages[Math.min(page, pages.length) - 1];
+    coach.hidden = true; coachgood.hidden = false; tutorState = 4;
+  }
+  mic.addEventListener('click', () => {
+    const words = pagetext.textContent.split(' ').length;
+    const secs = Math.max(4, Math.round(words * 1.5));
+    if (tutorState === 0 || tutorState === 4) { coachgood.hidden = true; tutorState = 1; listen(secs, showMiss); }
+    else if (tutorState === 1) { clearTimeout(timer); showMiss(); }
+    else if (tutorState === 2) { tutorState = 3; coach.hidden = true; listen(secs, showGood); }
+    else if (tutorState === 3) { clearTimeout(timer); showGood(); }
+  });
+
+  // Color accents, all-books, app switches
+  document.getElementById('optcolor').addEventListener('change', e => {
+    screen.classList.toggle('color', e.target.checked); doFlash();
+  });
+  const tints = { chess: 'var(--ecolor-teal)', chessworld: 'var(--ecolor-ochre)', hangman: 'var(--ecolor-moss)', hoopla: 'var(--ecolor-rust)' };
+  Object.keys(tints).forEach(k => document.querySelector('[data-app="' + k + '"]').style.setProperty('--tint', tints[k]));
+  document.querySelector('.tile.big').style.setProperty('--tint', 'var(--ecolor-rust)');
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-all]')) alert('Opens the full library: 31 books, grouped by level, easiest first. Same tags.');
+    const asw = e.target.closest('[data-appsw]');
+    if (asw) { asw.classList.toggle('on'); asw.closest('.approw').classList.toggle('off', !asw.classList.contains('on')); }
+  });
+
+  // PIN
+  let pin = '';
+  function resetPin() { pin = ''; drawDots(); }
+  function drawDots() {
+    document.querySelectorAll('#dots .dot').forEach((d, i) => d.classList.toggle('f', i < pin.length));
+  }
+  document.getElementById('pad').addEventListener('click', e => {
+    const k = e.target.closest('.key'); if (!k) return;
+    if (k.dataset.del) { pin = pin.slice(0, -1); drawDots(); return; }
+    const v = k.textContent.trim(); if (!/^\d$/.test(v)) return;
+    pin += v; drawDots();
+    if (pin.length === 4) setTimeout(() => go('parent'), 200);
+  });
+
+  // Parent tabs and switch
+  document.querySelectorAll('.ptab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.ptab').forEach(x => x.classList.toggle('on', x === t));
+    document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === t.dataset.tab));
+  }));
+  const sw = document.getElementById('kidsw');
+  const hint = document.getElementById('kidshint');
+  function toggleKids() {
+    const on = !sw.classList.contains('on');
+    sw.classList.toggle('on', on); sw.setAttribute('aria-checked', String(on));
+    hint.textContent = on ? 'On. Only the 5 apps on the home screen can open.' : 'Off. Device returns to the normal Boox home screen for you.';
+  }
+  sw.addEventListener('click', toggleKids);
+  sw.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleKids(); } });
+
+  // Cap simulation
+  optcap.addEventListener('change', () => {
+    const tile = document.querySelector('[data-app="chess"]');
+    tile.classList.toggle('done', optcap.checked);
+    tile.querySelector('[data-meta="chess"]').textContent = optcap.checked ? 'Done for today' : '';
+    tile.querySelector('[data-bar="chess"]').style.width = optcap.checked ? '100%' : '40%';
+  });
+
+  // Keyboard: tiles act on Enter
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('tile')) e.target.click();
+  });
+
+  renderPage();
+})();
+</script>
