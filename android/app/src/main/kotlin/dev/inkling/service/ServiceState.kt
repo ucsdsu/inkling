@@ -16,20 +16,21 @@ sealed class Action {
 }
 
 object ServiceState {
-    /** How long after the warning overlay goes up its own window events stay ignored. */
-    const val OVERLAY_SUPPRESS_MS = 5_000L
+    /** The only window of ours that means the child is actually looking at Inkling. */
+    const val MAIN_ACTIVITY = "dev.inkling.MainActivity"
 
     /** How often the service re-evaluates the app that is already in front. */
     const val TICK_MS = 30_000L
 
     /**
-     * True when a window event must be dropped. The warning overlay is a window in our own
-     * package, so posting it raises a window event for [self] while the tracked app is still in
-     * front. Handling that event closes the running span and points lastPkg at us, which stops
-     * the mid-session cap re-check dead.
+     * True when a window event really is the foreground app changing. The warning overlay is a
+     * window in our own package, so posting it raises an event for [self] while the tracked app is
+     * still in front; acting on that would close the running span and point lastPkg at us. The
+     * overlay reports its widget class, so only [MAIN_ACTIVITY] counts as us coming to the front.
+     * Anyone else's window always counts.
      */
-    fun ignoreEvent(pkg: String, self: String, overlaySuppressUntil: Long, now: Long): Boolean =
-        pkg == self && now < overlaySuppressUntil
+    fun isForegroundChange(pkg: String, className: String?, self: String): Boolean =
+        pkg != self || className == MAIN_ACTIVITY
 
     /** Decides what the service does when [pkg] comes to the front. Pure, so it's testable. */
     fun onForeground(

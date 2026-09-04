@@ -37,7 +37,6 @@ class KidsModeService : AccessibilityService() {
     private var lastPkg: String? = null
     private val warnedFor = mutableSetOf<String>()
     private var warnedDay: Long = 0
-    @Volatile private var overlaySuppressUntil: Long = 0
     private var ticker: Job? = null
 
     override fun onServiceConnected() {
@@ -55,7 +54,7 @@ class KidsModeService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (ServiceState.ignoreEvent(pkg, packageName, overlaySuppressUntil, System.currentTimeMillis())) return
+        if (!ServiceState.isForegroundChange(pkg, event.className?.toString(), packageName)) return
         scope.launch { onForeground(pkg) }
     }
 
@@ -122,7 +121,6 @@ class KidsModeService : AccessibilityService() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.OPAQUE,
         ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; y = 80 }
-        overlaySuppressUntil = System.currentTimeMillis() + ServiceState.OVERLAY_SUPPRESS_MS
         wm.addView(view, lp)
         scope.launch { delay(3_000); withContext(Dispatchers.Main) { runCatching { wm.removeView(view) } } }
     }

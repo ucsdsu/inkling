@@ -59,19 +59,27 @@ class ServiceStateTest {
     }
 
     @Test
-    fun ownWarningOverlayEventIsIgnored() {
-        // The overlay is a window in our own package. Handling its event closed the running span
-        // and killed the mid-session cap re-check.
-        val until = 1_000L + ServiceState.OVERLAY_SUPPRESS_MS
-        assertTrue(ServiceState.ignoreEvent("dev.inkling", "dev.inkling", until, 2_000L))
+    fun ourOwnActivityIsAForegroundChange() {
+        assertTrue(ServiceState.isForegroundChange("dev.inkling", "dev.inkling.MainActivity", "dev.inkling"))
     }
 
     @Test
-    fun otherPackagesAndLateOwnEventsAreNotIgnored() {
-        val until = 1_000L + ServiceState.OVERLAY_SUPPRESS_MS
-        // A real switch to Inkling after the overlay window has passed still counts.
-        assertFalse(ServiceState.ignoreEvent("dev.inkling", "dev.inkling", until, until + 1))
-        // Another app is never suppressed.
-        assertFalse(ServiceState.ignoreEvent("com.chess", "dev.inkling", until, 2_000L))
+    fun ourWarningOverlayIsNot() {
+        // The overlay is a window in our own package and reports its widget class. Acting on it
+        // closed the running span and pointed lastPkg at us.
+        assertFalse(ServiceState.isForegroundChange("dev.inkling", "android.widget.TextView", "dev.inkling"))
+        assertFalse(ServiceState.isForegroundChange("dev.inkling", null, "dev.inkling"))
+    }
+
+    @Test
+    fun anotherPackageAlwaysCounts() {
+        assertTrue(ServiceState.isForegroundChange("com.chess", "android.widget.TextView", "dev.inkling"))
+        assertTrue(ServiceState.isForegroundChange("com.chess", null, "dev.inkling"))
+    }
+
+    @Test
+    fun mainActivityConstantMatchesTheRealClass() {
+        // A rename of MainActivity would otherwise silently stop Inkling being seen as foreground.
+        assertEquals(dev.inkling.MainActivity::class.java.name, ServiceState.MAIN_ACTIVITY)
     }
 }
