@@ -71,7 +71,18 @@ class ReadingRepoTest {
         val c = repo.ensureChild()
         repo.logPage(c.id, BOOK, page = 3, mode = "self", startedAt = 1_000, endedAt = 2_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 3_000, endedAt = 4_000)
+        repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "tts", startedAt = DAY + 5_000, endedAt = DAY + 6_000)
+        assertEquals(2, repo.history(c.id, BOOK, PAGES).finished)
+    }
+
+    @Test fun finishedCountsOncePerDay() = runBlocking {
+        val c = repo.ensureChild()
+        // Paging back and forth over the last page is one reading, not three.
+        repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 1_000, endedAt = 2_000)
+        repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 3_000, endedAt = 4_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "tts", startedAt = 5_000, endedAt = 6_000)
+        assertEquals(1, repo.history(c.id, BOOK, PAGES).finished)
+        repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = DAY + 1_000, endedAt = DAY + 2_000)
         assertEquals(2, repo.history(c.id, BOOK, PAGES).finished)
     }
 
@@ -96,5 +107,6 @@ class ReadingRepoTest {
     private companion object {
         const val BOOK = "short-e-hen"
         const val PAGES = 10
+        const val DAY = 86_400_000L
     }
 }

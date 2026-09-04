@@ -85,7 +85,7 @@ class Repo(private val db: InklingDb) {
         db.reads().booksFinishedSince(childId, PAGES_PER_BOOK - 1, dayStart)
 
     /**
-     * Shelf history for one book. [finished] counts how many times the last page was logged.
+     * Shelf history for one book. [finished] counts the days he reached the last page.
      * Accuracy pools the ten most recent attempts on the book: 1 - missed words / words attempted.
      * Null when he has never read it aloud, which the shelf shows as "try it" rather than a score.
      *

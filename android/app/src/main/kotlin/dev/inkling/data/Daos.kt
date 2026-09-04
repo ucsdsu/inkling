@@ -47,7 +47,14 @@ interface SpikeDao {
 interface ReadEventDao {
     @Insert suspend fun insert(e: ReadEvent): Long
 
-    @Query("SELECT COUNT(*) FROM ReadEvent WHERE childId = :childId AND bookId = :bookId AND page = :last")
+    /**
+     * Days on which the last page was reached, not last-page events. Turning back and forward on
+     * page 10 five times is one reading of the book, and the shelf says so.
+     */
+    @Query(
+        "SELECT COUNT(DISTINCT startedAt / 86400000) FROM ReadEvent " +
+            "WHERE childId = :childId AND bookId = :bookId AND page = :last",
+    )
     suspend fun timesFinished(childId: Long, bookId: String, last: Int): Int
 
     @Query("SELECT COUNT(DISTINCT bookId) FROM ReadEvent WHERE childId = :childId AND page = :last AND startedAt >= :dayStart")
