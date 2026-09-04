@@ -27,16 +27,46 @@ class RepoTest {
     }
     @After fun tearDown() { db.close() }
 
-    @Test fun ensureChildCreatesOnce() = runBlocking {
-        val a = repo.ensureChild()
-        val b = repo.ensureChild()
-        assertEquals(a.id, b.id)
-        assertEquals("Cove", a.name)
-        assertEquals(false, repo.settings(a.id).kidsModeOn)
+    @Test fun activeChildIsNullOnFreshDb() = runBlocking {
+        assertNull(repo.activeChild())
+        assertEquals(emptyList<Child>(), repo.children())
+    }
+
+    @Test fun addChildSetsActiveAndCreatesSettings() = runBlocking {
+        val c = repo.addChild("Cove", 4, "dinosaurs,chess", 2)
+        assertEquals("Cove", c.name)
+        assertEquals(4, c.ageYears)
+        assertEquals("dinosaurs,chess", c.interests)
+        assertEquals(2, c.startStage)
+        assertEquals(c.id, repo.activeChild()?.id)
+        assertEquals(false, repo.settings(c.id).kidsModeOn)
+    }
+
+    @Test fun setActiveChildSwitches() = runBlocking {
+        val a = repo.addChild("Cove", 4, "", 0)
+        val b = repo.addChild("Wren", 6, "", 3)
+        assertEquals(b.id, repo.activeChild()?.id)
+        repo.setActiveChild(a.id)
+        assertEquals(a.id, repo.activeChild()?.id)
+        assertEquals("Cove", repo.activeChild()?.name)
+    }
+
+    @Test fun childrenListsInCreationOrder() = runBlocking {
+        repo.addChild("Cove", 4, "", 0)
+        repo.addChild("Wren", 6, "", 0)
+        repo.addChild("Ash", 5, "", 0)
+        assertEquals(listOf("Cove", "Wren", "Ash"), repo.children().map { it.name })
+    }
+
+    @Test fun setStartStageUpdatesTheChild() = runBlocking {
+        val c = repo.addChild("Cove", 4, "", 0)
+        repo.setStartStage(c.id, 4)
+        assertEquals(4, repo.activeChild()?.startStage)
+        assertEquals(4, repo.children().single().startStage)
     }
 
     @Test fun openSpanClosesPrevious() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.openSpan(c.id, "com.chess", 1_000)
         repo.openSpan(c.id, "com.hangman", 5_000)
         val spans = repo.spansToday(c.id, 0)
@@ -46,7 +76,7 @@ class RepoTest {
     }
 
     @Test fun openSpanIfChangedKeepsTheSameSessionOpen() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.openSpanIfChanged(c.id, "com.chess", 1_000)
         repo.openSpanIfChanged(c.id, "com.chess", 61_000)
         val spans = repo.spansToday(c.id, 0)
@@ -57,7 +87,7 @@ class RepoTest {
     }
 
     @Test fun openSpanIfChangedStartsANewSpanForANewApp() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.openSpanIfChanged(c.id, "com.chess", 1_000)
         repo.openSpanIfChanged(c.id, "com.hangman", 5_000)
         val spans = repo.spansToday(c.id, 0)
@@ -68,7 +98,7 @@ class RepoTest {
     }
 
     @Test fun closeStaleSpansCapsAtMaxSpan() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         val now = 100L * 60 * 60 * 1000
         repo.openSpan(c.id, "com.chess", now - 10 * 60 * 60 * 1000)   // 10 hours ago
         repo.closeStaleSpans(now)
@@ -78,7 +108,7 @@ class RepoTest {
     }
 
     @Test fun closeStaleSpansUsesNowForRecentSpans() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         val now = 100L * 60 * 60 * 1000
         repo.openSpan(c.id, "com.chess", now - 60_000)
         repo.closeStaleSpans(now)
@@ -87,7 +117,7 @@ class RepoTest {
     }
 
     @Test fun concurrentOpenSpansLeaveExactlyOneOpen() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         val pkgs = listOf("com.chess", "com.hangman")
         coroutineScope {
             repeat(20) { i ->
@@ -98,7 +128,7 @@ class RepoTest {
     }
 
     @Test fun rulesUpsertByPackage() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.upsertRule(AppRule(childId = c.id, packageName = "com.chess", label = "Chess", enabled = true, dailyCapMinutes = 30))
         repo.upsertRule(AppRule(childId = c.id, packageName = "com.chess", label = "Chess", enabled = false, dailyCapMinutes = 10))
         val rules = repo.rules(c.id)

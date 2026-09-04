@@ -9,8 +9,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChildDao {
-    @Query("SELECT * FROM Child ORDER BY id LIMIT 1") suspend fun first(): Child?
+    @Query("SELECT * FROM Child ORDER BY id") suspend fun all(): List<Child>
+    @Query("SELECT * FROM Child WHERE id = :id") suspend fun byId(id: Long): Child?
+    @Query("UPDATE Child SET startStage = :stage WHERE id = :id") suspend fun setStartStage(id: Long, stage: Int)
     @Insert suspend fun insert(c: Child): Long
+}
+
+@Dao
+interface DeviceStateDao {
+    @Query("SELECT * FROM DeviceState WHERE id = 1") suspend fun get(): DeviceState?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(s: DeviceState)
 }
 
 @Dao

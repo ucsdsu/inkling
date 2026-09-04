@@ -35,7 +35,13 @@ data class Tile(
     val icon: ImageBitmap? = null,
 )
 
-data class HomeState(val childName: String = "", val booksToday: Int = 0, val tiles: List<Tile> = emptyList())
+data class HomeState(
+    val childName: String = "",
+    val booksToday: Int = 0,
+    val tiles: List<Tile> = emptyList(),
+    /** True when no child has been onboarded. Nav sends this to the onboarding flow. */
+    val noChild: Boolean = false,
+)
 
 /** "1 book today." reads wrong as "1 books today.", and he will notice. */
 fun booksTodayLine(n: Int): String = if (n == 1) "1 book today." else "$n books today."
@@ -67,7 +73,11 @@ class HomeViewModel(private val repo: Repo, private val pm: PackageManager) : Vi
     val state: StateFlow<HomeState> = _state
 
     fun refresh() = viewModelScope.launch {
-        val child = repo.ensureChild()
+        val child = repo.activeChild()
+        if (child == null) {
+            _state.value = HomeState(noChild = true)
+            return@launch
+        }
         val settings = repo.settings(child.id)
         val rules = repo.rules(child.id)
         val now = System.currentTimeMillis()

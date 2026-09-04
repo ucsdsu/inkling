@@ -10,6 +10,20 @@ data class Child(
     val name: String,
     val ageYears: Int,
     val createdAt: Long,
+    /** Comma-separated interest tags from onboarding. Stored now, used by phase 2 book generation. */
+    val interests: String = "",
+    /** Stage index the placement read put him at. The shelf never drops below it. */
+    val startStage: Int = 0,
+)
+
+/**
+ * The one row of device-wide state. Several children can live here; exactly one is active, and a
+ * null [activeChildId] means nobody has been onboarded yet.
+ */
+@Entity
+data class DeviceState(
+    @PrimaryKey val id: Int = 1,
+    val activeChildId: Long?,
 )
 
 @Entity(indices = [Index(value = ["childId", "packageName"], unique = true)])

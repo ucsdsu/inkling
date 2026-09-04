@@ -6,12 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [Child::class, AppRule::class, UsageEvent::class, Settings::class, SpikeRow::class, ReadEvent::class, TutorAttempt::class],
-    version = 2,
+    entities = [Child::class, DeviceState::class, AppRule::class, UsageEvent::class, Settings::class, SpikeRow::class, ReadEvent::class, TutorAttempt::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class InklingDb : RoomDatabase() {
     abstract fun children(): ChildDao
+    abstract fun deviceState(): DeviceStateDao
     abstract fun settings(): SettingsDao
     abstract fun rules(): AppRuleDao
     abstract fun usage(): UsageDao

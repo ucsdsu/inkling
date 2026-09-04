@@ -96,7 +96,9 @@ class KidsModeService : AccessibilityService() {
      */
     private suspend fun evaluate(pkg: String, openSpan: Boolean) {
         val repo = InklingApp.instance.repo
-        val child = repo.ensureChild()
+        // Nobody onboarded yet: there are no rules to enforce and no child to log against, so the
+        // service stays out of the way until the parent finishes onboarding.
+        val child = repo.activeChild() ?: return
         val s = repo.settings(child.id)
         val rules = repo.rules(child.id).map { Rule(it.packageName, it.enabled, it.dailyCapMinutes) }
         val now = System.currentTimeMillis()

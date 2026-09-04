@@ -13,12 +13,40 @@ object Pin {
 }
 
 class Repo(private val db: InklingDb) {
-    suspend fun ensureChild(): Child {
-        db.children().first()?.let { return it }
-        val id = db.children().insert(Child(name = "Cove", ageYears = 4, createdAt = System.currentTimeMillis()))
-        db.settings().upsert(Settings(childId = id))
-        return db.children().first()!!
+    /**
+     * The child the device is currently set to, or null when nobody has been onboarded. Callers
+     * treat null as "show onboarding", never as "make one up": a default child was how the old
+     * ensureChild() silently created "Cove" on a stranger's tablet.
+     */
+    suspend fun activeChild(): Child? {
+        val id = db.deviceState().get()?.activeChildId ?: return null
+        return db.children().byId(id)
     }
+
+    /** Every child on the device, oldest first. */
+    suspend fun children(): List<Child> = db.children().all()
+
+    /**
+     * Adds a child, gives them a settings row, and makes them active.
+     *
+     * @param interests comma-separated tags from onboarding
+     * @param startStage stage index the placement read landed on
+     */
+    suspend fun addChild(name: String, ageYears: Int, interests: String, startStage: Int): Child = db.withTransaction {
+        val id = db.children().insert(
+            Child(
+                name = name, ageYears = ageYears, createdAt = System.currentTimeMillis(),
+                interests = interests, startStage = startStage,
+            ),
+        )
+        db.settings().upsert(Settings(childId = id))
+        db.deviceState().upsert(DeviceState(activeChildId = id))
+        db.children().byId(id)!!
+    }
+
+    suspend fun setActiveChild(id: Long) = db.deviceState().upsert(DeviceState(activeChildId = id))
+
+    suspend fun setStartStage(childId: Long, stage: Int) = db.children().setStartStage(childId, stage)
 
     suspend fun settings(childId: Long): Settings = db.settings().get(childId) ?: Settings(childId).also { db.settings().upsert(it) }
     suspend fun saveSettings(s: Settings) = db.settings().upsert(s)

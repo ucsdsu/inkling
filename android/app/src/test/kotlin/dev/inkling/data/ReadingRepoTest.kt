@@ -43,7 +43,7 @@ class ReadingRepoTest {
     )
 
     @Test fun historyIsNullWithoutAttempts() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.logPage(c.id, BOOK, page = 0, mode = "tts", startedAt = 1_000, endedAt = 5_000)
         val h = repo.history(c.id, BOOK, PAGES)
         assertEquals(BOOK, h.bookId)
@@ -52,14 +52,14 @@ class ReadingRepoTest {
     }
 
     @Test fun accuracyIsOneMinusMissedShare() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.logAttempt(attempt(c.id, missed = "pen", at = 1_000))
         repo.logAttempt(attempt(c.id, missed = "pen ten hen", at = 2_000))
         assertEquals(0.75f, repo.history(c.id, BOOK, PAGES).lastAccuracy!!, 0.0001f)
     }
 
     @Test fun unclearAttemptsDoNotCountTowardAccuracy() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         // Three mumbles flagged nothing. Counted, they read as a perfect four-page book.
         repeat(3) { i -> repo.logAttempt(attempt(c.id, missed = "", at = 1_000L + i, lowConfidence = true)) }
         assertNull(repo.history(c.id, BOOK, PAGES).lastAccuracy)
@@ -68,7 +68,7 @@ class ReadingRepoTest {
     }
 
     @Test fun finishedCountsLastPageOnly() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.logPage(c.id, BOOK, page = 3, mode = "self", startedAt = 1_000, endedAt = 2_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 3_000, endedAt = 4_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "tts", startedAt = DAY + 5_000, endedAt = DAY + 6_000)
@@ -76,7 +76,7 @@ class ReadingRepoTest {
     }
 
     @Test fun finishedCountsOncePerDay() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         // Paging back and forth over the last page is one reading, not three.
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 1_000, endedAt = 2_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = 3_000, endedAt = 4_000)
@@ -87,7 +87,7 @@ class ReadingRepoTest {
     }
 
     @Test fun missedTwiceOrdersByFrequency() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         repo.logAttempt(attempt(c.id, missed = "pen ten hen", at = 1_000))
         repo.logAttempt(attempt(c.id, missed = "pen ten", at = 2_000))
         repo.logAttempt(attempt(c.id, missed = "pen", at = 3_000))
@@ -95,7 +95,7 @@ class ReadingRepoTest {
     }
 
     @Test fun booksFinishedTodayIgnoresYesterday() = runBlocking {
-        val c = repo.ensureChild()
+        val c = repo.addChild("Cove", 4, "", 0)
         val dayStart = 100_000L
         repo.logPage(c.id, "short-a-cat", page = PAGES - 1, mode = "self", startedAt = dayStart - 10_000, endedAt = dayStart - 9_000)
         repo.logPage(c.id, BOOK, page = PAGES - 1, mode = "self", startedAt = dayStart + 1_000, endedAt = dayStart + 2_000)

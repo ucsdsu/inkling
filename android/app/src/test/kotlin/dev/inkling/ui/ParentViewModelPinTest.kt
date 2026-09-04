@@ -35,7 +35,7 @@ class ParentViewModelPinTest {
 
     @Test fun rightPinUnlocksWrongPinDoesNot() = runBlocking {
         val repo = Repo(db)
-        val child = repo.ensureChild()
+        val child = repo.addChild("Cove", 4, "", 0)
         repo.saveSettings(repo.settings(child.id).copy(pinHash = Pin.hash("1234")))
         assertTrue(vm.tryPin("1234", 0))
         assertFalse(vm.tryPin("9999", 0))

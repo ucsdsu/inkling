@@ -43,6 +43,8 @@ data class ParentState(
     val reading: ReadingState = ReadingState(),
     /** False until [ParentViewModel.refresh] has published a settings row at least once. */
     val loaded: Boolean = false,
+    /** True when no child has been onboarded. Nav sends this to the onboarding flow. */
+    val noChild: Boolean = false,
 )
 
 /** Quotes one CSV field. A double quote inside the value is doubled, per RFC 4180. */
@@ -99,7 +101,11 @@ class ParentViewModel(
     var setupProblems: () -> List<String> = { emptyList() }
 
     fun refresh() = viewModelScope.launch {
-        val child = repo.ensureChild()
+        val child = repo.activeChild()
+        if (child == null) {
+            _state.value = ParentState(loaded = true, noChild = true)
+            return@launch
+        }
         val settings = repo.settings(child.id)
         val rules = repo.rules(child.id)
         val now = System.currentTimeMillis()
@@ -139,14 +145,15 @@ class ParentViewModel(
     }
 
     fun setApp(row: AppRow, enabled: Boolean, cap: Int) = viewModelScope.launch {
-        val child = repo.ensureChild()
+        val child = repo.activeChild() ?: return@launch
         repo.upsertRule(AppRule(childId = child.id, packageName = row.packageName, label = row.label, enabled = enabled, dailyCapMinutes = cap.coerceIn(0, 600)))
         refresh()
     }
 
     /** Returns true when the PIN is right. Wrong entries count toward lockout. */
     suspend fun tryPin(pin: String, now: Long): Boolean {
-        val child = repo.ensureChild()
+        // No child, no settings row, so no PIN. Onboarding is the only way past this screen.
+        val child = repo.activeChild() ?: return false
         val s = repo.settings(child.id)
         if (now < s.lockoutUntil) return false
         // No PIN set means nothing can unlock. First-run PIN creation goes through PinMode.SET, never here.
@@ -161,7 +168,8 @@ class ParentViewModel(
     }
 
     suspend fun lockoutRemainingSeconds(now: Long): Int {
-        val s = repo.settings(repo.ensureChild().id)
+        val child = repo.activeChild() ?: return 0
+        val s = repo.settings(child.id)
         return ((s.lockoutUntil - now) / 1000).coerceAtLeast(0).toInt()
     }
 
@@ -178,7 +186,7 @@ class ParentViewModel(
     }
 
     private fun update(f: (Settings) -> Settings) = viewModelScope.launch {
-        val child = repo.ensureChild()
+        val child = repo.activeChild() ?: return@launch
         repo.saveSettings(f(repo.settings(child.id)))
         refresh()
     }

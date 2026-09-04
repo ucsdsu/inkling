@@ -45,6 +45,8 @@ data class ReaderState(
     val speechMode: String = "",
     /** Replaces the "I didn't catch that" line when something other than the child is the reason. */
     val notice: String? = null,
+    /** True when no child has been onboarded. Nav sends this to the onboarding flow. */
+    val noChild: Boolean = false,
 )
 
 /** One book on the shelf, with the word the shelf shows for it. */
@@ -169,7 +171,12 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     private var fakeIndex = 0
 
     fun loadShelf() = viewModelScope.launch {
-        val child = repo.ensureChild()
+        val child = repo.activeChild()
+        if (child == null) {
+            _state.value = _state.value.copy(noChild = true)
+            _shelf.value = emptyList()
+            return@launch
+        }
         childId = child.id
         val books = store.all()
         val histories = books.associate { it.id to repo.history(child.id, it.id, it.pages.size) }
@@ -178,7 +185,12 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     fun open(bookId: String) = viewModelScope.launch {
         if (!shouldOpen(_state.value.book?.id, bookId)) return@launch
-        childId = repo.ensureChild().id
+        val child = repo.activeChild()
+        if (child == null) {
+            _state.value = ReaderState(noChild = true)
+            return@launch
+        }
+        childId = child.id
         _state.value = ReaderState(book = store.byId(bookId), page = 0)
         startPage()
     }
