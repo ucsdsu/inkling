@@ -118,7 +118,7 @@ fun ReaderScreen(
         }
         when (state.phase) {
             TutorPhase.COACH -> CoachCard(state, onReplayChunks)
-            TutorPhase.UNCLEAR -> PlainCard("I didn't catch that. Try again.")
+            TutorPhase.UNCLEAR -> PlainCard(state.notice ?: "I didn't catch that. Try again.")
             TutorPhase.GOOD -> GoodCard(onNext)
             else -> Unit
         }

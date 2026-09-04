@@ -1,6 +1,10 @@
 package dev.inkling.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
@@ -13,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.compose.NavHost
@@ -109,6 +114,11 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
             val s by reader.state.collectAsState()
             val bookId = back.arguments?.getString("bookId").orEmpty()
             LaunchedEffect(bookId) { reader.open(bookId) }
+            // The mic is asked for on the first tap, not at install. A refusal says why on the
+            // card the child already knows, and never calls it his mistake.
+            val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) reader.listen() else reader.micDenied()
+            }
             // Forward off the last page is the finish: log that page, then back to the shelf.
             val forward: () -> Unit = {
                 if (s.page >= (s.book?.pages?.size ?: 1) - 1) {
@@ -124,7 +134,11 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
                 onTurn = { if (it > 0) forward() else reader.turn(it) },
                 onNext = forward,
                 onSpeak = { reader.speakLine() },
-                onListen = { reader.listen() },
+                onListen = {
+                    val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                    if (granted) reader.listen() else askMic.launch(Manifest.permission.RECORD_AUDIO)
+                },
                 onStopListening = { reader.stopListening() },
                 onReplayChunks = { reader.replayChunks() },
                 onDebugFake = if (BuildConfig.DEBUG) ({ reader.fakeRecognition() }) else null,

@@ -19,6 +19,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * What the UNCLEAR card says when the microphone was refused. Parent-facing on purpose: the child
+ * did nothing wrong, and nothing on this card tells him he did.
+ */
+const val MIC_DENIED = "Inkling needs the microphone to hear you read."
+
 /** What the reader is doing about the child's voice right now. */
 enum class TutorPhase { IDLE, LISTENING, COACH, UNCLEAR, GOOD }
 
@@ -37,6 +43,8 @@ data class ReaderState(
     val missedWord: String? = null,
     val chunks: List<Chunk> = emptyList(),
     val speechMode: String = "",
+    /** Replaces the "I didn't catch that" line when something other than the child is the reason. */
+    val notice: String? = null,
 )
 
 /** One book on the shelf, with the word the shelf shows for it. */
@@ -52,11 +60,11 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
     val line = book.pages[state.page]
     val r = ReadingDiff.score(line, transcript, if (confidence < 0) 1f else confidence)
     return when {
-        r.lowConfidence -> state.copy(phase = TutorPhase.UNCLEAR, missedWord = null, chunks = emptyList())
-        r.missed.isEmpty() -> state.copy(phase = TutorPhase.GOOD, missedWord = null, chunks = emptyList())
+        r.lowConfidence -> state.copy(phase = TutorPhase.UNCLEAR, missedWord = null, chunks = emptyList(), notice = null)
+        r.missed.isEmpty() -> state.copy(phase = TutorPhase.GOOD, missedWord = null, chunks = emptyList(), notice = null)
         else -> {
             val w = r.missed.first()
-            state.copy(phase = TutorPhase.COACH, missedWord = w, chunks = Chunker.chunk(w, book.target))
+            state.copy(phase = TutorPhase.COACH, missedWord = w, chunks = Chunker.chunk(w, book.target), notice = null)
         }
     }
 }
@@ -207,7 +215,9 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     fun listen() {
         if (_state.value.book == null) return
         usedSelf = true
-        _state.value = _state.value.copy(phase = TutorPhase.LISTENING, speakingWord = -1, missedWord = null, chunks = emptyList())
+        _state.value = _state.value.copy(
+            phase = TutorPhase.LISTENING, speakingWord = -1, missedWord = null, chunks = emptyList(), notice = null,
+        )
         speaker.stop()
         session.start()
         recognizer.listen(
@@ -219,6 +229,11 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
                 }
             },
         )
+    }
+
+    /** The parent said no to the microphone. Says so on the card the child would see anyway. */
+    fun micDenied() {
+        _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, notice = MIC_DENIED, missedWord = null, chunks = emptyList())
     }
 
     /** He tapped the mic off. Nothing he half-said gets coached or logged. */
