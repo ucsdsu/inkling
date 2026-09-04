@@ -4,6 +4,8 @@ import dev.inkling.core.Rule
 import dev.inkling.core.Span
 import dev.inkling.core.Verdict
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServiceStateTest {
@@ -38,5 +40,22 @@ class ServiceStateTest {
     @Test fun kidsModeOffNeverActs() {
         val (a, _) = ServiceState.onForeground("com.android.settings", "dev.inkling", snap.copy(kidsModeOn = false), emptyList(), now, 0, 12 * 60, emptySet())
         assertEquals(Action.None, a)
+    }
+
+    @Test
+    fun ownWarningOverlayEventIsIgnored() {
+        // The overlay is a window in our own package. Handling its event closed the running span
+        // and killed the mid-session cap re-check.
+        val until = 1_000L + ServiceState.OVERLAY_SUPPRESS_MS
+        assertTrue(ServiceState.ignoreEvent("dev.inkling", "dev.inkling", until, 2_000L))
+    }
+
+    @Test
+    fun otherPackagesAndLateOwnEventsAreNotIgnored() {
+        val until = 1_000L + ServiceState.OVERLAY_SUPPRESS_MS
+        // A real switch to Inkling after the overlay window has passed still counts.
+        assertFalse(ServiceState.ignoreEvent("dev.inkling", "dev.inkling", until, until + 1))
+        // Another app is never suppressed.
+        assertFalse(ServiceState.ignoreEvent("com.chess", "dev.inkling", until, 2_000L))
     }
 }

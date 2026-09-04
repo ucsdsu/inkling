@@ -16,6 +16,18 @@ sealed class Action {
 }
 
 object ServiceState {
+    /** How long after the warning overlay goes up its own window events stay ignored. */
+    const val OVERLAY_SUPPRESS_MS = 5_000L
+
+    /**
+     * True when a window event must be dropped. The warning overlay is a window in our own
+     * package, so posting it raises a window event for [self] while the tracked app is still in
+     * front. Handling that event closes the running span and points lastPkg at us, which stops
+     * the mid-session cap re-check dead.
+     */
+    fun ignoreEvent(pkg: String, self: String, overlaySuppressUntil: Long, now: Long): Boolean =
+        pkg == self && now < overlaySuppressUntil
+
     /** Decides what the service does when [pkg] comes to the front. Pure, so it's testable. */
     fun onForeground(
         pkg: String, self: String, snap: Snapshot, spans: List<Span>,
