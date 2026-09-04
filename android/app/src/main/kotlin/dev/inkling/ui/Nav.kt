@@ -1,6 +1,9 @@
 package dev.inkling.ui
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -116,6 +120,13 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
             LaunchedEffect(bookId) { reader.open(bookId) }
             // The mic is asked for on the first tap, not at install. A refusal says why on the
             // card the child already knows, and never calls it his mistake.
+            // Hardware Back pops the route without touching our back arrow, which left the TTS
+            // talking into an empty screen and lost the page from the reading log. A rotation
+            // disposes this route too, and that is not leaving the book.
+            val activity = ctx.activity()
+            DisposableEffect(bookId) {
+                onDispose { if (activity?.isChangingConfigurations != true) reader.leave() }
+            }
             val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                 if (granted) reader.listen() else reader.micDenied()
             }
@@ -146,4 +157,14 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
         }
         composable("spike") { SpikeScreen(dev.inkling.InklingApp.instance.repo) }
     }
+}
+
+/** The activity behind a composition's context, through however many wrappers. */
+private fun Context.activity(): Activity? {
+    var c: Context? = this
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
+    return null
 }

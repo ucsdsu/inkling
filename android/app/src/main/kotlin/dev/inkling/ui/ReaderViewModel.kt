@@ -195,9 +195,19 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     }
 
     /** Leaving the book forward off the last page. Logs the page that makes it "finished". */
-    fun finish() {
-        logPage()
+    fun finish() = leave()
+
+    /**
+     * Closing the book, however it happened: our own back arrow, or the hardware Back key popping
+     * the route out from under us. Both voices stop and the page he was on is logged, so a book
+     * left by the hardware key still counts as reading.
+     */
+    fun leave() {
+        if (_state.value.book == null) return
+        recognizer.cancel()
+        session.cancel()
         speaker.stop()
+        logPage()
         _state.value = ReaderState()
     }
 
