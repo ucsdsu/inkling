@@ -62,6 +62,21 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
 }
 
 /**
+ * The two transcripts the debug long-press feeds the tutor, built from the line on the page so
+ * the coach names a word the child can actually see.
+ *
+ * The first reads r as w, which the diff forgives as articulation, so it lands on "nice reading".
+ * The second starts the last word with the wrong letter, so the coach sounds that word out.
+ */
+fun fakeTranscripts(line: String): List<String> {
+    val words = line.trim().split(" ").filter { it.isNotEmpty() }
+    val last = words.lastOrNull().orEmpty()
+    val wrongLetter = if (last.firstOrNull()?.lowercaseChar() == 'b') 'd' else 'b'
+    val misread = words.dropLast(1) + (wrongLetter + last.drop(1))
+    return listOf(line.replace("r", "w"), misread.joinToString(" "))
+}
+
+/**
  * How a page gets logged. TTS wins over the tutor: once the line has been read to him, that is
  * how he got through the page, whatever he did after.
  */
@@ -191,11 +206,14 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     }
 
     /**
-     * Debug only: pretends the recognizer heard a line, so the coach and the "nice reading" states
-     * can be shown on an emulator with no microphone. Cycles a good read and a missed word.
+     * Debug only: pretends the recognizer heard the line on the page, so the coach and the
+     * "nice reading" states can be shown on an emulator with no microphone. Cycles a good read
+     * and a missed word, both built from whatever book is open.
      */
     fun fakeRecognition() {
-        val fakes = listOf("the hen is wed", "the hen is bed")
+        val s = _state.value
+        val book = s.book ?: return
+        val fakes = fakeTranscripts(book.pages[s.page])
         handleRecognition(fakes[fakeIndex % fakes.size], 1f)
         fakeIndex++
     }

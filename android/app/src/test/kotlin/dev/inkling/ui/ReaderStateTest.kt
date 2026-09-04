@@ -59,6 +59,23 @@ class ReaderStateTest {
         assertEquals(TutorPhase.GOOD, onRecognized(red, "the hen is wed", 1f).phase)
     }
 
+    @Test fun debugFakesComeFromTheLineOnThePage() {
+        val fakes = fakeTranscripts("The hen is in the pen.")
+        assertEquals(listOf("The hen is in the pen.", "The hen is in the ben."), fakes)
+        assertEquals(TutorPhase.GOOD, onRecognized(state, fakes[0], 1f).phase)
+        val coached = onRecognized(state, fakes[1], 1f)
+        assertEquals(TutorPhase.COACH, coached.phase)
+        assertEquals("pen", coached.missedWord)
+    }
+
+    @Test fun theGoodFakeIsTheLineWithRSaidAsW() {
+        val red = ReaderState(book = hen.copy(pages = listOf("The hen is red.")), page = 0)
+        val fakes = fakeTranscripts("The hen is red.")
+        assertEquals(listOf("The hen is wed.", "The hen is bed."), fakes)
+        assertEquals(TutorPhase.GOOD, onRecognized(red, fakes[0], 1f).phase)
+        assertEquals("red", onRecognized(red, fakes[1], 1f).missedWord)
+    }
+
     @Test fun ttsWinsTheModeForThePage() {
         // He tapped "Read to me" and then tried it himself: he heard the line, so the log says tts.
         assertEquals(ReadMode.TTS, pageMode(usedTts = true, usedSelf = true))
