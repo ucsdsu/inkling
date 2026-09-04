@@ -4,7 +4,9 @@ import dev.inkling.books.Book
 import dev.inkling.core.BookHistory
 import dev.inkling.core.Tag
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderStateTest {
@@ -55,6 +57,13 @@ class ReaderStateTest {
         // "wed" for "red" is a 4-year-old saying r as w, not a decoding miss.
         val red = ReaderState(book = hen.copy(pages = listOf("The hen is red.")), page = 0)
         assertEquals(TutorPhase.GOOD, onRecognized(red, "the hen is wed", 1f).phase)
+    }
+
+    @Test fun reopeningTheOpenBookLeavesThePageAlone() {
+        // Rotation re-runs the route's open effect. Reloading it rewound him to page 0.
+        assertFalse(shouldOpen("short-e-hen", "short-e-hen"))
+        assertTrue(shouldOpen(null, "short-e-hen"))
+        assertTrue(shouldOpen("short-a-cat", "short-e-hen"))
     }
 
     @Test fun freshShelfOffersTheFirstStageOnly() {

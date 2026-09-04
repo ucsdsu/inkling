@@ -61,6 +61,12 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
     }
 }
 
+/**
+ * Whether the reader should load [requested]. False when that book is already open: rotation
+ * recreates the route and re-runs its effect, and reopening rewound the child to page 0.
+ */
+fun shouldOpen(currentId: String?, requested: String): Boolean = currentId != requested
+
 /** "cvc-e" reads as "short e"; "digraph-sh" as "sh digraph". */
 fun stageLabel(stage: String): String = when {
     stage.startsWith("cvc-") -> "short ${stage.removePrefix("cvc-")}"
@@ -114,6 +120,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     }
 
     fun open(bookId: String) = viewModelScope.launch {
+        if (!shouldOpen(_state.value.book?.id, bookId)) return@launch
         childId = repo.ensureChild().id
         _state.value = ReaderState(book = store.byId(bookId), page = 0)
         startPage()
