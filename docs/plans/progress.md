@@ -20,4 +20,7 @@ Blocked on Jon:
 Next:
 - Plan task 1 (Gradle scaffold), then task 3 (speech spike) on the device.
 
-Spike result: not run yet.
+Spike result: not run yet with Cove. Screen verified on the boox7 emulator (Android 14,
+Play Store image) on 2026-09-04: SpikeScreen renders, the RECORD_AUDIO prompt appears, and
+tapping Listen returns `recognizer error 13` (ERROR_LANGUAGE_NOT_SUPPORTED) because the
+emulator ships no offline en-US model. Engine choice stays open until the Boox run.
