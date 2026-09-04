@@ -13,6 +13,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -31,7 +33,9 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
         popEnterTransition = { EnterTransition.None }, popExitTransition = { ExitTransition.None }) {
         composable("home") {
             val s by home.state.collectAsState()
-            LaunchedEffect(Unit) { home.refresh() }
+            // Not LaunchedEffect: coming back from a launched app does not recompose the route,
+            // so the tiles kept yesterday's minutes until the process restarted.
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { home.refresh() }
             KidHome(
                 state = s,
                 onOpen = { t ->

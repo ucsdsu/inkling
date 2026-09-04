@@ -2,8 +2,6 @@ package dev.inkling.data
 
 import dev.inkling.core.Budget
 import dev.inkling.core.Span
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filterNotNull
 import java.security.MessageDigest
 
 object Pin {
@@ -20,11 +18,9 @@ class Repo(private val db: InklingDb) {
         return db.children().first()!!
     }
 
-    fun settingsFlow(childId: Long): Flow<Settings> = db.settings().flow(childId).filterNotNull()
     suspend fun settings(childId: Long): Settings = db.settings().get(childId) ?: Settings(childId).also { db.settings().upsert(it) }
     suspend fun saveSettings(s: Settings) = db.settings().upsert(s)
 
-    fun rulesFlow(childId: Long): Flow<List<AppRule>> = db.rules().flow(childId)
     suspend fun rules(childId: Long): List<AppRule> = db.rules().list(childId)
     suspend fun upsertRule(r: AppRule) {
         val existing = db.rules().find(r.childId, r.packageName)
