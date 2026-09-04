@@ -42,3 +42,28 @@ interface SpikeDao {
     @Insert suspend fun insert(r: SpikeRow)
     @Query("SELECT * FROM SpikeRow ORDER BY at") suspend fun all(): List<SpikeRow>
 }
+
+@Dao
+interface ReadEventDao {
+    @Insert suspend fun insert(e: ReadEvent): Long
+
+    @Query("SELECT COUNT(*) FROM ReadEvent WHERE childId = :childId AND bookId = :bookId AND page = :last")
+    suspend fun timesFinished(childId: Long, bookId: String, last: Int): Int
+
+    @Query("SELECT COUNT(DISTINCT bookId) FROM ReadEvent WHERE childId = :childId AND page = :last AND startedAt >= :dayStart")
+    suspend fun booksFinishedSince(childId: Long, last: Int, dayStart: Long): Int
+}
+
+@Dao
+interface TutorAttemptDao {
+    @Insert suspend fun insert(a: TutorAttempt): Long
+
+    @Query("SELECT * FROM TutorAttempt WHERE childId = :childId AND bookId = :bookId ORDER BY at DESC LIMIT 10")
+    suspend fun recentForBook(childId: Long, bookId: String): List<TutorAttempt>
+
+    @Query("SELECT * FROM TutorAttempt WHERE childId = :childId ORDER BY at DESC LIMIT :limit")
+    suspend fun recent(childId: Long, limit: Int): List<TutorAttempt>
+
+    @Query("SELECT * FROM TutorAttempt WHERE childId = :childId ORDER BY at DESC")
+    suspend fun all(childId: Long): List<TutorAttempt>
+}

@@ -54,3 +54,31 @@ data class SpikeRow(
     val verdict: String,
     val at: Long,
 )
+
+@Entity(indices = [Index("childId"), Index("bookId"), Index("startedAt")])
+data class ReadEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val childId: Long,
+    val bookId: String,
+    val page: Int,
+    val startedAt: Long,
+    val endedAt: Long?,
+    /** "tts" (read to me), "self" (I'll read), or "look" (page turned without either). */
+    val mode: String,
+)
+
+@Entity(indices = [Index("childId"), Index("bookId"), Index("at")])
+data class TutorAttempt(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val childId: Long,
+    val bookId: String,
+    val page: Int,
+    val transcript: String,
+    val confidence: Float,
+    /** Space-separated words the child missed on this line. Empty when the line was clean. */
+    val missed: String,
+    /** Words on the line, so accuracy is missed share of what was actually attempted. */
+    val totalWords: Int,
+    val lowConfidence: Boolean,
+    val at: Long,
+)
