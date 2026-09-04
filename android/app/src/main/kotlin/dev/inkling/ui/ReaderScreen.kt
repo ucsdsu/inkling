@@ -38,9 +38,6 @@ import dev.inkling.R
 /** Kid text on the page. The spec floor is 30sp; the reader gets a little more. */
 private val PageTextSize = 32.sp
 
-/** Every tap target a four-year-old aims at is at least this tall. */
-private val TapTarget = 60.dp
-
 /**
  * One page of a book, with the tutor underneath it.
  *
@@ -64,10 +61,10 @@ fun ReaderScreen(
     val listening = state.phase == TutorPhase.LISTENING
     Column(Modifier.fillMaxSize().background(InklingColors.Paper).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "‹ Books", fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2,
-                modifier = Modifier.clickable(onClick = onBack).padding(vertical = 6.dp, horizontal = 2.dp),
-            )
+            Box(
+                Modifier.heightIn(min = TapTarget).clickable(onClick = onBack).padding(horizontal = 2.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) { Text("‹ Books", fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2) }
             Text(book.title, fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2)
             Spacer(Modifier.width(1.dp))
         }

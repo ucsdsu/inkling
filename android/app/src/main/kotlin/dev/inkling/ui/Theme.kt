@@ -9,6 +9,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.inkling.R
 
@@ -24,6 +25,9 @@ object InklingColors {
     val Rust = Color(0xFFB8776A)
     val Moss = Color(0xFF8FA574)
 }
+
+/** Every tap target a four-year-old aims at is at least this tall. */
+val TapTarget = 60.dp
 
 val Andika = FontFamily(
     Font(R.font.andika_regular, FontWeight.Normal),

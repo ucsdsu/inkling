@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,10 +53,10 @@ private fun tagColor(t: Tag): Color = when (t) {
 fun ShelfScreen(rows: List<ShelfRow>, onOpen: (String) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(InklingColors.Paper).padding(20.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "‹ Home", fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2,
-                modifier = Modifier.clickable(onClick = onBack).padding(vertical = 6.dp, horizontal = 2.dp),
-            )
+            Box(
+                Modifier.heightIn(min = TapTarget).clickable(onClick = onBack).padding(horizontal = 2.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) { Text("‹ Home", fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2) }
         }
         Spacer(Modifier.height(6.dp))
         Text("Your books", fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = InklingColors.Ink)
