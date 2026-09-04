@@ -3,11 +3,15 @@ package dev.inkling.ui
 import android.widget.Toast
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -44,14 +48,19 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
         composable("pin") {
             val s by parent.state.collectAsState()
             LaunchedEffect(Unit) { parent.refresh() }
-            PinScreen(
-                hasPin = s.settings?.pinHash != null,
-                tryPin = { parent.tryPin(it, System.currentTimeMillis()) },
-                lockoutSeconds = { parent.lockoutRemainingSeconds(System.currentTimeMillis()) },
-                onSetPin = { parent.setPin(it) },
-                onUnlocked = { nav.navigate("parent") { popUpTo("home") } },
-                onBack = { nav.popBackStack() },
-            )
+            // Blank paper until the settings row is read. Rendering the pad early would show the
+            // "choose a PIN" flow to a parent who already has one.
+            when (val mode = pinMode(s)) {
+                null -> Box(Modifier.fillMaxSize().background(InklingColors.Paper))
+                else -> PinScreen(
+                    hasPin = mode == PinMode.UNLOCK,
+                    tryPin = { parent.tryPin(it, System.currentTimeMillis()) },
+                    lockoutSeconds = { parent.lockoutRemainingSeconds(System.currentTimeMillis()) },
+                    onSetPin = { parent.setPin(it) },
+                    onUnlocked = { nav.navigate("parent") { popUpTo("home") } },
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
         composable("parent") {
             val s by parent.state.collectAsState()
