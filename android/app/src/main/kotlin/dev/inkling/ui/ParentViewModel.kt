@@ -8,9 +8,13 @@ import dev.inkling.books.Book
 import dev.inkling.books.BookStore
 import dev.inkling.core.BookHistory
 import dev.inkling.core.Budget
+import dev.inkling.core.NextUp
 import dev.inkling.core.PinPolicy
+import dev.inkling.core.Recommendation
+import dev.inkling.core.ShelfEntry
 import dev.inkling.core.Span
 import dev.inkling.data.AppRule
+import dev.inkling.data.Child
 import dev.inkling.data.Pin
 import dev.inkling.data.Repo
 import dev.inkling.data.Settings
@@ -41,6 +45,12 @@ data class ParentState(
     val totalMinutes: Int = 0,
     val setupProblems: List<String> = emptyList(),
     val reading: ReadingState = ReadingState(),
+    /** Every child on the device, oldest first, for the Rules > Children row. */
+    val children: List<Child> = emptyList(),
+    /** Which of [children] the device is set to. 0 when nobody is onboarded. */
+    val activeChildId: Long = 0,
+    /** What the Next up tab shows. Empty until he has a shelf worth suggesting from. */
+    val nextUp: List<Recommendation> = emptyList(),
     /** False until [ParentViewModel.refresh] has published a settings row at least once. */
     val loaded: Boolean = false,
     /** True when no child has been onboarded. Nav sends this to the onboarding flow. */
@@ -74,6 +84,23 @@ fun buildReading(
     )
 }
 
+/**
+ * Pure. Flattens the shelf into the Android-free rows [NextUp] reads.
+ *
+ * The shelf already carries the tag, so Next up and the shelf can never disagree about whether a
+ * book is a stretch: one calculation, two screens.
+ */
+fun toShelfEntries(rows: List<ShelfRow>, histories: Map<String, BookHistory>): List<ShelfEntry> =
+    rows.map { r ->
+        ShelfEntry(
+            bookId = r.book.id,
+            title = r.book.title,
+            stageLabel = stageLabel(r.book.stage),
+            tag = r.tag,
+            lastAccuracy = histories[r.book.id]?.lastAccuracy,
+        )
+    }
+
 /** "finished×2 · 91%", or "not started" when he has never opened it. */
 fun readingRowValue(row: ReadingBookRow): String {
     val parts = buildList {
@@ -106,6 +133,7 @@ class ParentViewModel(
             _state.value = ParentState(loaded = true, noChild = true)
             return@launch
         }
+        val children = repo.children()
         val settings = repo.settings(child.id)
         val rules = repo.rules(child.id)
         val now = System.currentTimeMillis()
@@ -116,15 +144,22 @@ class ParentViewModel(
         _state.value = _state.value.copy(
             settings = settings, today = today, totalMinutes = total,
             setupProblems = setupProblems(), loaded = true,
+            children = children, activeChildId = child.id, noChild = false,
         )
         val all = books.all()
+        val histories = all.associate { it.id to repo.history(child.id, it.id, it.pages.size) }
+        val missedTwice = repo.missedTwice(child.id)
         _state.value = _state.value.copy(
             reading = buildReading(
                 books = all,
-                histories = all.associate { it.id to repo.history(child.id, it.id, it.pages.size) },
-                missedTwice = repo.missedTwice(child.id),
+                histories = histories,
+                missedTwice = missedTwice,
                 attempts = repo.recentAttempts(child.id, ATTEMPT_WINDOW),
                 dayStart = Budget.startOfDay(now, zone),
+            ),
+            nextUp = NextUp.recommend(
+                toShelfEntries(buildShelf(all, histories, child.startStage), histories),
+                missedTwice,
             ),
         )
         val installed = withContext(Dispatchers.IO) { InstalledApps.launchable(pm, self) }
@@ -142,6 +177,15 @@ class ParentViewModel(
     fun setPin(pin: String) {
         if (pin.isEmpty()) return
         update { it.copy(pinHash = Pin.hash(pin), pinFailures = 0, lockoutUntil = 0) }
+    }
+
+    /** Points the device at another child. Everything on the parent screen reloads for them. */
+    fun switchChild(id: Long) = viewModelScope.launch {
+        repo.setActiveChild(id)
+        // Reset first: the old child's books and recommendations must not sit on screen while the
+        // new child's rows load.
+        _state.value = ParentState()
+        refresh().join()
     }
 
     fun setApp(row: AppRow, enabled: Boolean, cap: Int) = viewModelScope.launch {

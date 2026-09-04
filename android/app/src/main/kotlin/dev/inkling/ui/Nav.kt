@@ -101,6 +101,8 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
                 },
                 onChangePin = { nav.navigate("pin/set") },
                 onLock = { nav.navigate("home") { popUpTo("home") { inclusive = true } } },
+                onAddChild = { nav.navigate("onboard/profile") },
+                onSwitchChild = { parent.switchChild(it) },
             )
         }
         composable("pin/set") {

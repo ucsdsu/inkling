@@ -134,14 +134,18 @@ fun stageLabel(stage: String): String = when {
 /**
  * The stage the child is working on: the first book he has not read accurately enough to call easy.
  * Everything below it is behind him, everything above it is a stretch.
+ *
+ * [startStage] is the floor the placement read set. A child who read "ship" on day one never gets
+ * handed "cat" as his try-it book, but reading his way past the floor still moves him up.
  */
-fun currentStageIndex(books: List<Book>, histories: Map<String, BookHistory>): Int {
+fun currentStageIndex(books: List<Book>, histories: Map<String, BookHistory>, startStage: Int = 0): Int {
     val i = books.indexOfFirst { (histories[it.id]?.lastAccuracy ?: 0f) < ShelfTags.EASY_FLOOR }
-    return if (i < 0) books.lastIndex.coerceAtLeast(0) else i
+    val fromHistory = if (i < 0) books.lastIndex.coerceAtLeast(0) else i
+    return maxOf(fromHistory, startStage).coerceAtMost(books.lastIndex.coerceAtLeast(0))
 }
 
-fun buildShelf(books: List<Book>, histories: Map<String, BookHistory>): List<ShelfRow> {
-    val current = currentStageIndex(books, histories)
+fun buildShelf(books: List<Book>, histories: Map<String, BookHistory>, startStage: Int = 0): List<ShelfRow> {
+    val current = currentStageIndex(books, histories, startStage)
     return books.mapIndexed { i, b ->
         ShelfRow(b, ShelfTags.tag(histories[b.id], i, current), "Decodable · ${stageLabel(b.stage)} · ${b.pages.size} pages")
     }
@@ -180,7 +184,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         childId = child.id
         val books = store.all()
         val histories = books.associate { it.id to repo.history(child.id, it.id, it.pages.size) }
-        _shelf.value = buildShelf(books, histories)
+        _shelf.value = buildShelf(books, histories, child.startStage)
     }
 
     fun open(bookId: String) = viewModelScope.launch {

@@ -28,8 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.inkling.core.Recommendation
+import dev.inkling.data.Child
 
 @Composable
 fun ParentScreen(
@@ -43,6 +46,8 @@ fun ParentScreen(
     onExportSpike: () -> Unit,
     onChangePin: () -> Unit,
     onLock: () -> Unit,
+    onAddChild: () -> Unit,
+    onSwitchChild: (Long) -> Unit,
 ) {
     var tab by remember { mutableStateOf("Today") }
     val s = state.settings ?: return
@@ -75,7 +80,7 @@ fun ParentScreen(
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Today", "Reading", "Apps", "Rules").forEach { t ->
+            listOf("Today", "Reading", "Next up", "Apps", "Rules").forEach { t ->
                 Box(
                     Modifier.border(1.5.dp, if (tab == t) InklingColors.Ink else InklingColors.Ink3, RoundedCornerShape(14.dp))
                         .background(if (tab == t) InklingColors.Paper2 else InklingColors.Paper, RoundedCornerShape(14.dp))
@@ -87,8 +92,9 @@ fun ParentScreen(
         when (tab) {
             "Today" -> TodayTab(state)
             "Reading" -> ReadingTab(state.reading)
+            "Next up" -> NextUpTab(state.nextUp)
             "Apps" -> AppsTab(state, onApp)
-            "Rules" -> RulesTab(s.deviceCeilingMinutes, onCeiling, onChangePin, onSpeechTest, onExportSpike)
+            "Rules" -> RulesTab(s.deviceCeilingMinutes, state.children, state.activeChildId, onCeiling, onChangePin, onSpeechTest, onExportSpike, onAddChild, onSwitchChild)
         }
     }
 }
@@ -132,6 +138,26 @@ private fun ReadingTab(r: ReadingState) {
 }
 
 @Composable
+private fun NextUpTab(recs: List<Recommendation>) {
+    if (recs.isEmpty()) {
+        Text("Nothing to suggest yet. Read a book first.", fontSize = 13.sp, color = InklingColors.Ink2)
+        return
+    }
+    Column {
+        recs.forEach { r ->
+            Column(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    .border(1.5.dp, InklingColors.Ink3, RoundedCornerShape(10.dp)).padding(12.dp),
+            ) {
+                Text(r.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(r.why, fontSize = 12.sp, color = InklingColors.Ink2)
+            }
+        }
+    }
+}
+
+@Composable
 private fun AppsTab(state: ParentState, onApp: (AppRow, Boolean, Int) -> Unit) {
     LazyColumn {
         items(state.apps, key = { it.packageName }) { a ->
@@ -147,7 +173,17 @@ private fun AppsTab(state: ParentState, onApp: (AppRow, Boolean, Int) -> Unit) {
 }
 
 @Composable
-private fun RulesTab(ceiling: Int, onCeiling: (Int) -> Unit, onChangePin: () -> Unit, onSpeechTest: () -> Unit, onExportSpike: () -> Unit) {
+private fun RulesTab(
+    ceiling: Int,
+    children: List<Child>,
+    activeChildId: Long,
+    onCeiling: (Int) -> Unit,
+    onChangePin: () -> Unit,
+    onSpeechTest: () -> Unit,
+    onExportSpike: () -> Unit,
+    onAddChild: () -> Unit,
+    onSwitchChild: (Long) -> Unit,
+) {
     Column {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Whole-device daily ceiling", fontSize = 13.sp)
@@ -156,11 +192,38 @@ private fun RulesTab(ceiling: Int, onCeiling: (Int) -> Unit, onChangePin: () -> 
         KeyValue("Warning before a cap", "2 min")
         KeyValue("Games unlock after", "off")
         KeyValue("Quiet hours", "7:30 pm – 7:00 am")
-        KeyValue("Children", "Cove")
+        ChildrenRow(children, activeChildId, onAddChild, onSwitchChild)
         Spacer(Modifier.height(12.dp))
         BigButton("Change PIN", filled = false, onClick = onChangePin)
         BigButton("Speech test", filled = false, onClick = onSpeechTest)
         BigButton("Export speech test CSV", filled = false, onClick = onExportSpike)
+    }
+}
+
+/**
+ * Every child on the device. The active one is bold; tapping another switches to them, which is
+ * the only way a second child is any use before phase 2's per-child home screens.
+ */
+@Composable
+private fun ChildrenRow(children: List<Child>, activeChildId: Long, onAddChild: () -> Unit, onSwitchChild: (Long) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Children", fontSize = 13.sp, color = InklingColors.Ink2)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            children.forEach { c ->
+                val active = c.id == activeChildId
+                Text(
+                    c.name, fontSize = 13.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (active) InklingColors.Ink else InklingColors.Ink2,
+                    modifier = Modifier.clickable(enabled = !active) { onSwitchChild(c.id) },
+                )
+            }
+            Text(
+                "+ add child", fontSize = 13.sp, color = InklingColors.Ink2,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable(onClick = onAddChild),
+            )
+        }
     }
 }
 

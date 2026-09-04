@@ -123,6 +123,18 @@ class ReaderStateTest {
         assertEquals(listOf(Tag.EASY, Tag.TRY_IT, Tag.STRETCH), buildShelf(books, h).map { it.tag })
     }
 
+    @Test fun startStageRaisesCurrentStage() {
+        // Placement put him at book 2. Nothing has been read, so history alone would say stage 0.
+        assertEquals(0, currentStageIndex(books, emptyMap()))
+        assertEquals(2, currentStageIndex(books, emptyMap(), startStage = 2))
+        assertEquals(listOf(Tag.EASY, Tag.EASY, Tag.TRY_IT), buildShelf(books, emptyMap(), startStage = 2).map { it.tag })
+        // A start stage past the shelf cannot point at a book that does not exist.
+        assertEquals(2, currentStageIndex(books, emptyMap(), startStage = 5))
+        // History that has already moved him further wins over the placement floor.
+        val h = mapOf("a" to BookHistory("a", 1, 0.96f), "short-e-hen" to BookHistory("short-e-hen", 1, 0.97f))
+        assertEquals(2, currentStageIndex(books, h, startStage = 1))
+    }
+
     @Test fun aRoughReadIsStretchWhereverItSits() {
         val h = mapOf("a" to BookHistory("a", 0, 0.6f))
         assertEquals(Tag.STRETCH, buildShelf(books, h).first().tag)

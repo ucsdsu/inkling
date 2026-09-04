@@ -2,7 +2,9 @@ package dev.inkling.ui
 
 import dev.inkling.books.Book
 import dev.inkling.core.BookHistory
+import dev.inkling.core.NextUp
 import dev.inkling.core.Span
+import dev.inkling.core.Tag
 import dev.inkling.data.AppRule
 import dev.inkling.data.TutorAttempt
 import org.junit.Assert.assertEquals
@@ -72,5 +74,24 @@ class ParentStateTest {
 
     @Test fun noAttemptsMeansNoAverage() {
         assertEquals(null, buildReading(listOf(hen), emptyMap(), emptyList(), emptyList(), day).accuracyToday)
+    }
+
+    @Test fun nextUpMapsShelfRowsToEntries() {
+        val books = listOf(hen, fox)
+        val histories = mapOf("short-e-hen" to BookHistory("short-e-hen", 1, 0.88f))
+        val entries = toShelfEntries(buildShelf(books, histories), histories)
+        assertEquals(listOf("short-e-hen", "short-o-fox"), entries.map { it.bookId })
+        assertEquals(listOf("The Big Red Hen", "The Fox on the Log"), entries.map { it.title })
+        assertEquals(listOf("short e", "short o"), entries.map { it.stageLabel })
+        assertEquals(listOf(Tag.JUST_RIGHT, Tag.STRETCH), entries.map { it.tag })
+        assertEquals(listOf(0.88f, null), entries.map { it.lastAccuracy })
+
+        // The mapping is only useful if NextUp can read it: the 88% book is the second-pass item.
+        val out = NextUp.recommend(entries, listOf("pen"))
+        assertEquals(listOf("The Big Red Hen", "The Fox on the Log"), out.map { it.title })
+        assertEquals(
+            "The Big Red Hen was 88% last time. A second pass usually pushes it past 90. Words to watch: pen.",
+            out[0].why,
+        )
     }
 }
