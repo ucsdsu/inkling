@@ -1,0 +1,80 @@
+package dev.inkling.ui
+
+import android.widget.Toast
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import dev.inkling.service.SetupCheck
+import dev.inkling.spike.SpikeScreen
+import kotlinx.coroutines.launch
+import java.io.File
+
+@Composable
+fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
+    val nav = rememberNavController()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    NavHost(nav, startDestination = "home",
+        enterTransition = { EnterTransition.None }, exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None }, popExitTransition = { ExitTransition.None }) {
+        composable("home") {
+            val s by home.state.collectAsState()
+            LaunchedEffect(Unit) { home.refresh() }
+            KidHome(
+                state = s,
+                onOpen = { t ->
+                    if (t.done) nav.navigate("done/${t.label}")
+                    else ctx.packageManager.getLaunchIntentForPackage(t.packageName)?.let { ctx.startActivity(it) }
+                },
+                onRead = { Toast.makeText(ctx, "Books come next.", Toast.LENGTH_SHORT).show() },
+                onGearLongPress = { nav.navigate("pin") },
+            )
+        }
+        composable("done/{label}") { back ->
+            DoneScreen(appLabel = back.arguments?.getString("label") ?: "", onPickBook = { nav.popBackStack() }, onBack = { nav.popBackStack() })
+        }
+        composable("pin") {
+            val s by parent.state.collectAsState()
+            LaunchedEffect(Unit) { parent.refresh() }
+            PinScreen(
+                hasPin = s.settings?.pinHash != null,
+                tryPin = { parent.tryPin(it, System.currentTimeMillis()) },
+                lockoutSeconds = { parent.lockoutRemainingSeconds(System.currentTimeMillis()) },
+                onSetPin = { parent.setPin(it) },
+                onUnlocked = { nav.navigate("parent") { popUpTo("home") } },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("parent") {
+            val s by parent.state.collectAsState()
+            LaunchedEffect(Unit) { parent.setupProblems = { SetupCheck.problems(ctx) }; parent.refresh() }
+            ParentScreen(
+                state = s,
+                onKidsMode = { parent.setKidsMode(it) },
+                onApp = { row, en, cap -> parent.setApp(row, en, cap) },
+                onCeiling = { parent.setCeiling(it) },
+                onOpenBooxHome = { SetupCheck.stockHomeIntent(ctx)?.let { ctx.startActivity(it) } ?: Toast.makeText(ctx, "No other home app found", Toast.LENGTH_SHORT).show() },
+                onFixSetup = { ctx.startActivity(SetupCheck.fixIntent(it)) },
+                onSpeechTest = { nav.navigate("spike") },
+                onExportSpike = {
+                    scope.launch {
+                        val f = File(ctx.getExternalFilesDir(null), "spike.csv")
+                        f.writeText(parent.spikeCsv())
+                        Toast.makeText(ctx, "Saved ${f.absolutePath}", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onChangePin = { parent.setPin(""); nav.navigate("pin") },
+                onLock = { nav.navigate("home") { popUpTo("home") { inclusive = true } } },
+            )
+        }
+        composable("spike") { SpikeScreen(dev.inkling.InklingApp.instance.repo) }
+    }
+}
