@@ -37,6 +37,17 @@ class Repo(private val db: InklingDb) {
     }
 
     /**
+     * Opens a span for [pkg] unless it is already the open one. The mid-session cap re-check runs
+     * handle() again for the same app every minute; without this each pass would split the session
+     * into one-minute spans and lose the seconds in between.
+     */
+    suspend fun openSpanIfChanged(childId: Long, pkg: String, now: Long) {
+        val open = db.usage().open()
+        if (open.isNotEmpty() && open.all { it.packageName == pkg }) return
+        openSpan(childId, pkg, now)
+    }
+
+    /**
      * Closes every span left open by a crash, a reboot, or an unbound service, capping each at
      * [Budget.MAX_SPAN_MS] past its start. Run at service connect and at app start.
      */

@@ -59,23 +59,33 @@ class KidsModeService : AccessibilityService() {
 
         // Log first, so the span that just ended is counted.
         val tracked = rules.any { it.packageName == pkg && it.enabled }
-        if (tracked) repo.openSpan(child.id, pkg, now) else repo.closeOpenSpan(now)
+        if (tracked) repo.openSpanIfChanged(child.id, pkg, now) else repo.closeOpenSpan(now)
 
         val spans = repo.spansToday(child.id, dayStart)
         val snap = Snapshot(s.kidsModeOn, rules, s.deviceCeilingMinutes, s.warningMinutes, s.quietStartMinute, s.quietEndMinute)
         val (action, _) = ServiceState.onForeground(pkg, packageName, snap, spans, now, zone, minuteOfDay, warnedFor)
         when (action) {
             is Action.SendHome -> withContext(Dispatchers.Main) { sendHome() }
-            is Action.Warn -> { warnedFor += pkg; withContext(Dispatchers.Main) { showWarning(action.minutesLeft) } }
+            is Action.Warn -> {
+                warnedFor += pkg
+                withContext(Dispatchers.Main) { showWarning(action.minutesLeft) }
+                // Keep the chain alive: the warning fires before the cap, so this is exactly the
+                // window where the next re-check matters.
+                if (tracked) scheduleCapCheck(pkg)
+            }
             Action.None -> if (tracked) scheduleCapCheck(pkg)
         }
     }
 
-    /** Re-evaluates once a minute while a tracked app stays in front, so caps fire mid-session. */
+    /**
+     * Re-evaluates once a minute while a tracked app stays in front, so caps fire mid-session.
+     * lastPkg is left alone: clearing it made the very next window event for the same app look
+     * like a change, and nothing ever restored it, so the chain died after one pass.
+     */
     private fun scheduleCapCheck(pkg: String) {
         scope.launch {
             delay(60_000)
-            if (lastPkg == pkg) { lastPkg = null; handle(pkg) }
+            if (lastPkg == pkg) handle(pkg)
         }
     }
 

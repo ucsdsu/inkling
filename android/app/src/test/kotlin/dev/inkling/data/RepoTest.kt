@@ -42,6 +42,28 @@ class RepoTest {
         assertNull(spans.first { it.packageName == "com.hangman" }.endedAt)
     }
 
+    @Test fun openSpanIfChangedKeepsTheSameSessionOpen() = runBlocking {
+        val c = repo.ensureChild()
+        repo.openSpanIfChanged(c.id, "com.chess", 1_000)
+        repo.openSpanIfChanged(c.id, "com.chess", 61_000)
+        val spans = repo.spansToday(c.id, 0)
+        assertEquals(1, spans.size)
+        assertEquals(1_000L, spans[0].startedAt)
+        assertNull(spans[0].endedAt)
+        Unit
+    }
+
+    @Test fun openSpanIfChangedStartsANewSpanForANewApp() = runBlocking {
+        val c = repo.ensureChild()
+        repo.openSpanIfChanged(c.id, "com.chess", 1_000)
+        repo.openSpanIfChanged(c.id, "com.hangman", 5_000)
+        val spans = repo.spansToday(c.id, 0)
+        assertEquals(2, spans.size)
+        assertEquals(5_000L, spans.first { it.packageName == "com.chess" }.endedAt)
+        assertNull(spans.first { it.packageName == "com.hangman" }.endedAt)
+        Unit
+    }
+
     @Test fun closeStaleSpansCapsAtMaxSpan() = runBlocking {
         val c = repo.ensureChild()
         val now = 100L * 60 * 60 * 1000
