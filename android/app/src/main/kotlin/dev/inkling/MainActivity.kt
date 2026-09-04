@@ -13,6 +13,7 @@ import dev.inkling.ui.InklingNav
 import dev.inkling.ui.InklingTheme
 import dev.inkling.ui.ParentViewModel
 import dev.inkling.ui.ReaderViewModel
+import dev.inkling.ui.onboarding.OnboardingViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
                 HomeViewModel::class.java -> HomeViewModel(repo, packageManager) as T
                 ParentViewModel::class.java -> ParentViewModel(repo, packageManager, packageName, BookStore(assets)) as T
                 ReaderViewModel::class.java -> ReaderViewModel(repo, BookStore(assets), applicationContext) as T
+                OnboardingViewModel::class.java -> OnboardingViewModel(repo, applicationContext) as T
                 else -> throw IllegalArgumentException("Unknown ViewModel $modelClass")
             }
         }
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
                     home = viewModel(factory = factory),
                     parent = viewModel(factory = factory),
                     reader = viewModel(factory = factory),
+                    onboarding = viewModel(factory = factory),
                     homePresses = homePresses,
                 )
             }

@@ -18,32 +18,51 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.inkling.BuildConfig
 import dev.inkling.service.SetupCheck
 import dev.inkling.spike.SpikeScreen
+import dev.inkling.ui.onboarding.FirstShelfScreen
+import dev.inkling.ui.onboarding.OnboardingViewModel
+import dev.inkling.ui.onboarding.PlacementScreen
+import dev.inkling.ui.onboarding.ProfileScreen
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
-fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewModel, homePresses: StateFlow<Int>) {
+fun InklingNav(
+    home: HomeViewModel,
+    parent: ParentViewModel,
+    reader: ReaderViewModel,
+    onboarding: OnboardingViewModel,
+    homePresses: StateFlow<Int>,
+) {
     val nav = rememberNavController()
     val presses by homePresses.collectAsState()
-    LaunchedEffect(presses) {
-        if (presses > 0) nav.navigate("home") { popUpTo("home") { inclusive = true } }
+    // A device with no child starts in onboarding. Blank paper until the row is read, because
+    // guessing "home" first would flash a kid screen with nobody's name on it.
+    var start by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { start = if (onboarding.hasChild()) "home" else ONBOARD_PROFILE }
+    LaunchedEffect(presses, start) {
+        if (presses > 0 && start != null) nav.navigate("home") { popUpTo("home") { inclusive = true } }
     }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    NavHost(nav, startDestination = "home",
+    val startDestination = start ?: return Box(Modifier.fillMaxSize().background(InklingColors.Paper))
+    NavHost(nav, startDestination = startDestination,
         enterTransition = { EnterTransition.None }, exitTransition = { ExitTransition.None },
         popEnterTransition = { EnterTransition.None }, popExitTransition = { ExitTransition.None }) {
         composable("home") {
@@ -160,9 +179,61 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
                 onDebugFake = if (BuildConfig.DEBUG) ({ reader.fakeRecognition() }) else null,
             )
         }
+        composable(ONBOARD_PROFILE) {
+            val s by onboarding.state.collectAsState()
+            LaunchedEffect(Unit) { onboarding.resetIfComplete() }
+            ProfileScreen(
+                state = s,
+                onName = { onboarding.setName(it) },
+                onAge = { onboarding.setAge(it) },
+                onInterest = { onboarding.toggleInterest(it) },
+                onNext = { nav.navigate("onboard/placement") },
+                // No back arrow on first launch: there is nothing behind onboarding to go back to.
+                onBack = if (nav.previousBackStackEntry == null) null else ({ nav.popBackStack(); Unit }),
+            )
+        }
+        composable("onboard/placement") {
+            val s by onboarding.state.collectAsState()
+            // The reader's mic pattern: asked for on arrival, and a refusal is said in the parent's
+            // words, never as something the child did.
+            var micDenied by remember { mutableStateOf(false) }
+            val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) onboarding.listen() else micDenied = true
+            }
+            val listen: () -> Unit = {
+                val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (granted) onboarding.listen() else if (!micDenied) askMic.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            // The mic opens itself on each new word, and again on the one retry an unclear buys.
+            LaunchedEffect(s.wordIndex, s.retried) { if (s.stage == null && !micDenied) listen() }
+            LaunchedEffect(s.stage) { if (s.stage != null) nav.navigate("onboard/done") }
+            DisposableEffect(Unit) { onDispose { onboarding.stopListening() } }
+            PlacementScreen(
+                state = s, micDenied = micDenied, onListen = listen,
+                onSkip = { onboarding.skip() }, onBack = { nav.popBackStack() },
+            )
+        }
+        composable("onboard/done") {
+            val s by onboarding.state.collectAsState()
+            FirstShelfScreen(
+                state = s,
+                onGo = {
+                    onboarding.finish {
+                        nav.navigate("home") { popUpTo(nav.graph.id) { inclusive = true } }
+                    }
+                },
+            )
+        }
         composable("spike") { SpikeScreen(dev.inkling.InklingApp.instance.repo) }
     }
 }
+
+/** Where onboarding starts. Named so the parent screen's "+ add child" cannot misspell it. */
+const val ONBOARD_PROFILE = "onboard/profile"
+
+/** Sends the parent to a new child's profile. What "+ add child" calls. */
+fun NavHostController.goOnboard() = navigate(ONBOARD_PROFILE)
 
 /** The activity behind a composition's context, through however many wrappers. */
 private fun Context.activity(): Activity? {
