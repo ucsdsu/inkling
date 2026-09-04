@@ -109,15 +109,20 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewM
             val s by reader.state.collectAsState()
             val bookId = back.arguments?.getString("bookId").orEmpty()
             LaunchedEffect(bookId) { reader.open(bookId) }
+            // Forward off the last page is the finish: log that page, then back to the shelf.
+            val forward: () -> Unit = {
+                if (s.page >= (s.book?.pages?.size ?: 1) - 1) {
+                    reader.finish()
+                    nav.popBackStack()
+                } else {
+                    reader.turn(1)
+                }
+            }
             ReaderScreen(
                 state = s,
                 onBack = { reader.finish(); nav.popBackStack() },
-                onTurn = { reader.turn(it) },
-                onNext = {
-                    val last = (s.book?.pages?.size ?: 1) - 1
-                    // Off the last page is the finish: log it, then back to the shelf.
-                    if (s.page >= last) { reader.finish(); nav.popBackStack() } else reader.turn(1)
-                },
+                onTurn = { if (it > 0) forward() else reader.turn(it) },
+                onNext = forward,
                 onSpeak = { reader.speakLine() },
                 onListen = { reader.listen() },
                 onStopListening = { reader.stopListening() },

@@ -30,6 +30,58 @@ Emulator journey (boox7 AVD, Android 14, 2026-09-04), tasks 5-8:
 - Force-stopping the app unbinds the accessibility service and Android does not rebind it. Worth
   watching on the Boox.
 
+## Phase 1b tasks 5-6 (2026-09-04)
+
+Shipped:
+- `ui/ShelfScreen.kt`, `ui/ReaderScreen.kt`, `ui/ReaderViewModel.kt`. The Read tile and the
+  "Pick a book" button on Done for today both open the shelf; a row opens `reader/{bookId}`.
+- Pure reducer `onRecognized(state, transcript, confidence)` plus `buildShelf` / `currentStageIndex`,
+  11 tests in `ui/ReaderStateTest.kt`.
+- Parent gets a Reading tab between Today and Apps, off pure `buildReading` (3 tests).
+- Kid home counts finished books and says "1 book today." in the singular.
+
+Decisions:
+- `ReaderViewModel` takes the application Context and owns Speaker and Recognizer for the process
+  lifetime. Building them per screen would have made the first "Read to me" of every book silent
+  while the TTS engine came up.
+- The Reading tab leaves low-confidence attempts out of both the count and the average. The
+  recognizer named nothing on those, so scoring them as clean reads would flatter him.
+- Current stage = the first book he has not read at 95% or better. Books below it read Easy,
+  above it Stretch, the stage itself Try it until he reads it aloud.
+
+Emulator journey (boox7, emulator-5554, Android 14, 2026-09-04), shots/1b_*.png:
+- Read tile opens a shelf of 6 books on a fresh DB: The Cat and the Hat "Try it", the other five
+  "Stretch" (1b_shelf.png).
+- The Big Red Hen opens at "The hen is red." 32sp, "page 1 of 10"; the right tap zone turns the
+  page (1b_reader_page1.png, 1b_reader_page2.png).
+- Read to me works and highlights word by word: hen, is, the, pen bold in sequence
+  (1b_tts_highlight.png, pulled from screenrecord because a still screencap is slower than the
+  utterance). Audibility is not provable on the emulator; logcat shows
+  `GoogleTTSServiceImpl: TTS dispatch: en-us-x-iog-seanet-embedded`, so an on-device voice ran.
+- I'll read turns the button rust and says "Listening…" (1b_listening.png). The emulator has no
+  offline pack (`SodaSpeechRecognizer: Failed to get language pack ... error 13`), so the online
+  retry fires and, with no mic audio, returns NO_SPEECH_DETECTED. The reader shows
+  "I didn't catch that. Try again." and the page footer labels the attempt "online speech"
+  (1b_unclear.png).
+- Debug-only long-press on the mic (BuildConfig.DEBUG) cycles two fake transcripts:
+  "the hen is wed" reads as GOOD, because r-to-w is articulation, not a decoding miss
+  (1b_good.png); "the hen is bed" coaches "red" with chunks r | e | d, the e on teal
+  (1b_coach.png).
+- Tapping through to page 10 and once more finishes the book and returns to the shelf, which now
+  tags The Big Red Hen "Just right" at 88% (1b_shelf_after.png). Kid home reads "1 book today."
+  (1b_home_one_book.png).
+- Parent, Reading tab: The Big Red Hen "finished×1 · 88%", the other five "not started", "red"
+  under WORDS HE MISSED TWICE, 4 read-aloud attempts today at 88% (1b_parent_reading.png).
+
+Found and fixed during the journey: the forward tap zone clamped at the last page, so a book could
+not be finished by turning pages. `Nav.kt` now routes any forward move off the last page through
+the same finish path as the "Next page" button.
+
+Residual for the next round: `Recognizer` puts a Long in
+`EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS`, which the engine expects as an Int, so it
+falls back to 0 ("Key ... expected Integer but value was a java.lang.Long" in logcat). It came in
+with the phase 1a spike, not with these tasks.
+
 ## Review round 2 (2026-09-04)
 
 A second review found 4 defects in the service's timing design. Fixed by taking timers out, not
