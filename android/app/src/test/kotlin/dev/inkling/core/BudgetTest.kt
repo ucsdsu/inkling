@@ -40,6 +40,19 @@ class BudgetTest {
     }
 
     @Test
+    fun staleOpenSpanIsCappedAtTwoHours() {
+        // Left open 10 hours ago by a crash. It must not eat the whole day.
+        val spans = listOf(Span("chess", noon - 10 * 60 * minute, null))
+        assertEquals(120, Budget.usedMinutesToday(spans, "chess", noon, zone))
+    }
+
+    @Test
+    fun closedSpanLongerThanTwoHoursIsAlsoCapped() {
+        val spans = listOf(Span("chess", noon - 5 * 60 * minute, noon - 60 * minute))
+        assertEquals(120, Budget.usedMinutesToday(spans, "chess", noon, zone))
+    }
+
+    @Test
     fun allPackagesSum() {
         val spans = listOf(
             Span("chess", noon - 30 * minute, noon - 10 * minute),

@@ -1,5 +1,6 @@
 package dev.inkling.data
 
+import dev.inkling.core.Budget
 import dev.inkling.core.Span
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterNotNull
@@ -33,6 +34,14 @@ class Repo(private val db: InklingDb) {
     suspend fun openSpan(childId: Long, pkg: String, now: Long) {
         closeOpenSpan(now)
         db.usage().insert(UsageEvent(childId = childId, packageName = pkg, startedAt = now, endedAt = null))
+    }
+
+    /**
+     * Closes every span left open by a crash, a reboot, or an unbound service, capping each at
+     * [Budget.MAX_SPAN_MS] past its start. Run at service connect and at app start.
+     */
+    suspend fun closeStaleSpans(now: Long) {
+        for (e in db.usage().open()) db.usage().update(e.copy(endedAt = minOf(now, e.startedAt + Budget.MAX_SPAN_MS)))
     }
 
     suspend fun closeOpenSpan(now: Long) {

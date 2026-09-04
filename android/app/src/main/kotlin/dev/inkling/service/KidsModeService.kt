@@ -31,6 +31,12 @@ class KidsModeService : AccessibilityService() {
     private val warnedFor = mutableSetOf<String>()
     private var warnedDay: Long = 0
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        // The service was unbound while an app was in front. That span is stale.
+        scope.launch { InklingApp.instance.repo.closeStaleSpans(System.currentTimeMillis()) }
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return

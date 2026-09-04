@@ -2,6 +2,7 @@ package dev.inkling.data
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.inkling.core.Budget
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -39,6 +40,25 @@ class RepoTest {
         assertEquals(2, spans.size)
         assertEquals(5_000L, spans.first { it.packageName == "com.chess" }.endedAt)
         assertNull(spans.first { it.packageName == "com.hangman" }.endedAt)
+    }
+
+    @Test fun closeStaleSpansCapsAtMaxSpan() = runBlocking {
+        val c = repo.ensureChild()
+        val now = 100L * 60 * 60 * 1000
+        repo.openSpan(c.id, "com.chess", now - 10 * 60 * 60 * 1000)   // 10 hours ago
+        repo.closeStaleSpans(now)
+        val stale = repo.spansToday(c.id, 0).first { it.packageName == "com.chess" }
+        assertEquals(now - 10 * 60 * 60 * 1000 + Budget.MAX_SPAN_MS, stale.endedAt)
+        Unit
+    }
+
+    @Test fun closeStaleSpansUsesNowForRecentSpans() = runBlocking {
+        val c = repo.ensureChild()
+        val now = 100L * 60 * 60 * 1000
+        repo.openSpan(c.id, "com.chess", now - 60_000)
+        repo.closeStaleSpans(now)
+        assertEquals(now, repo.spansToday(c.id, 0).first { it.packageName == "com.chess" }.endedAt)
+        Unit
     }
 
     @Test fun rulesUpsertByPackage() = runBlocking {
