@@ -30,6 +30,47 @@ Emulator journey (boox7 AVD, Android 14, 2026-09-04), tasks 5-8:
 - Force-stopping the app unbinds the accessibility service and Android does not rebind it. Worth
   watching on the Boox.
 
+## Review round 2 (2026-09-04)
+
+A second review found 4 defects in the service's timing design. Fixed by taking timers out, not
+by adding more. One commit each, each with a test or an emulator check that fails without it.
+
+- R1 Every window event spawned its own delay(60s) cap-check coroutine, and each pass spawned
+  another, so chains multiplied through a session. Each chain also read `lastPkg` outside the
+  Mutex that guards evaluation, so a switch mid-delay could re-evaluate a stale package. One
+  ticker started in onServiceConnected now loops `delay(30_000)` and re-evaluates `lastPkg` under
+  that same Mutex; it is cancelled in onDestroy. Every read and write of `lastPkg` and `warnedFor`
+  happens inside the lock. handle() split into onForeground() and evaluate(pkg, openSpan): the
+  ticker passes openSpan=false, because the span it would open is already open.
+  `ServiceState.onTick` is the pure decision, unit tested at cap and under cap.
+- R2 `ignoreEvent` guessed with a clock: it dropped every event from our own package for 5 seconds
+  after the warning overlay went up, so a real switch to Inkling inside that window was lost and a
+  late overlay event was handled. Replaced by `isForegroundChange(pkg, className, self)`: only
+  `dev.inkling.MainActivity` counts as us coming to the front, since the overlay reports its widget
+  class. The round-1 F4b note above describes the deleted mechanism, not the current one. A test
+  pins the constant to `MainActivity::class.java.name`.
+- R3 `Budget.MAX_SPAN_MS` clamped closed spans too, so a real 3-hour session was billed as 2 hours.
+  The clamp now applies only when `endedAt` is null, which is the case it exists for.
+  `closeStaleSpans` still writes abandoned spans down to start+2h when it closes them, so the guess
+  is made once, at close, not on every read.
+- R4 A span left running at bedtime ran all night. The service now registers a receiver for
+  ACTION_SCREEN_OFF (close the open span, clear lastPkg) and ACTION_USER_PRESENT (clear lastPkg, so
+  the first event after unlocking opens a fresh span), unregistered in onDestroy.
+
+Emulator evidence (boox7, emulator-5554, 2026-09-04):
+- Screen off/on (R4): span opened 13:13:27, KEYCODE_SLEEP at 13:14:33 closed the row at 13:14:34;
+  KEYCODE_WAKEUP at 13:14:48 opened a new span at 13:14:48. The 15 seconds asleep charge nobody.
+- Cap (R1, R2): Settings at 8 of a 10-minute cap opened 13:18:14, "2 minutes left" overlay at once,
+  bounced to dev.inkling/MainActivity at 13:20:31 without the child touching anything. The row ran
+  13:18:14 to 13:20:31 unbroken, so the overlay no longer splits the span. Kid home showed the tile
+  greyed "Done for today" (shots/r2_cap.png).
+- PIN 1234 unlocks; the parent Today tab read "Screen time today 8 min" against an injected closed
+  8-minute span, which is R3's arithmetic.
+- Play Store launched 13:17:49.834, focus back on dev.inkling at 13:17:49.999 (165 ms).
+
+Note for the next round: after `adb install -r`, toggle the accessibility service off and on. The
+old binding survives the install pointing at a dead process, and the service silently does nothing.
+
 Next:
 - Run the speech spike with Cove on the Boox, then the device journey on real hardware.
 
@@ -87,6 +128,47 @@ Deviations from the review's instructions:
 - The app's cap stepper moves in steps of 5, so a 2-minute cap is not reachable from the UI. The
   emulator check used a 10-minute cap entered at 8 minutes of use, which exercises the same window
   (warning, then block one minute later).
+
+## Review round 2 (2026-09-04)
+
+A second review found 4 defects in the service's timing design. Fixed by taking timers out, not
+by adding more. One commit each, each with a test or an emulator check that fails without it.
+
+- R1 Every window event spawned its own delay(60s) cap-check coroutine, and each pass spawned
+  another, so chains multiplied through a session. Each chain also read `lastPkg` outside the
+  Mutex that guards evaluation, so a switch mid-delay could re-evaluate a stale package. One
+  ticker started in onServiceConnected now loops `delay(30_000)` and re-evaluates `lastPkg` under
+  that same Mutex; it is cancelled in onDestroy. Every read and write of `lastPkg` and `warnedFor`
+  happens inside the lock. handle() split into onForeground() and evaluate(pkg, openSpan): the
+  ticker passes openSpan=false, because the span it would open is already open.
+  `ServiceState.onTick` is the pure decision, unit tested at cap and under cap.
+- R2 `ignoreEvent` guessed with a clock: it dropped every event from our own package for 5 seconds
+  after the warning overlay went up, so a real switch to Inkling inside that window was lost and a
+  late overlay event was handled. Replaced by `isForegroundChange(pkg, className, self)`: only
+  `dev.inkling.MainActivity` counts as us coming to the front, since the overlay reports its widget
+  class. The round-1 F4b note above describes the deleted mechanism, not the current one. A test
+  pins the constant to `MainActivity::class.java.name`.
+- R3 `Budget.MAX_SPAN_MS` clamped closed spans too, so a real 3-hour session was billed as 2 hours.
+  The clamp now applies only when `endedAt` is null, which is the case it exists for.
+  `closeStaleSpans` still writes abandoned spans down to start+2h when it closes them, so the guess
+  is made once, at close, not on every read.
+- R4 A span left running at bedtime ran all night. The service now registers a receiver for
+  ACTION_SCREEN_OFF (close the open span, clear lastPkg) and ACTION_USER_PRESENT (clear lastPkg, so
+  the first event after unlocking opens a fresh span), unregistered in onDestroy.
+
+Emulator evidence (boox7, emulator-5554, 2026-09-04):
+- Screen off/on (R4): span opened 13:13:27, KEYCODE_SLEEP at 13:14:33 closed the row at 13:14:34;
+  KEYCODE_WAKEUP at 13:14:48 opened a new span at 13:14:48. The 15 seconds asleep charge nobody.
+- Cap (R1, R2): Settings at 8 of a 10-minute cap opened 13:18:14, "2 minutes left" overlay at once,
+  bounced to dev.inkling/MainActivity at 13:20:31 without the child touching anything. The row ran
+  13:18:14 to 13:20:31 unbroken, so the overlay no longer splits the span. Kid home showed the tile
+  greyed "Done for today" (shots/r2_cap.png).
+- PIN 1234 unlocks; the parent Today tab read "Screen time today 8 min" against an injected closed
+  8-minute span, which is R3's arithmetic.
+- Play Store launched 13:17:49.834, focus back on dev.inkling at 13:17:49.999 (165 ms).
+
+Note for the next round: after `adb install -r`, toggle the accessibility service off and on. The
+old binding survives the install pointing at a dead process, and the service silently does nothing.
 
 Next:
 - Run the speech spike with Cove on the Boox, then the device journey on real hardware.
