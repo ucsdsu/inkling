@@ -74,9 +74,10 @@ fun SpikeScreen(repo: Repo) {
                     // line is still diffed and flagged. The raw -1 is what gets stored and shown.
                     transcript = t; confidence = c
                     result = ReadingDiff.score(line, t, if (c < 0) 1f else c)
-                    status = "Heard: \"$t\"  conf=" + if (c < 0) "n/a" else "%.2f".format(c)
+                    val conf = if (c < 0) "n/a" else "%.2f".format(c)
+                    status = "Heard: \"$t\"  conf=$conf via ${recognizer.lastMode}"
                 },
-                onError = { status = it },
+                onError = { status = "$it via ${recognizer.lastMode}" },
             )
         }) { Text("Listen") }
         Text(status)
