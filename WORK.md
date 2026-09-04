@@ -35,7 +35,8 @@ OUT OF SCOPE:
   - Generated books, images, PDF import, sync (phase 2)
 
 CURRENT PHASE:
-  - 1a: speech spike, launcher, blocker, parent screen
+  - 1a built and reviewed (3 rounds) on the boox7 emulator; 78 unit tests green.
+  - Waiting on the Boox for: speech spike with Cove, Onyx system package names, Home-button behavior.
 
 NEXT:
-  - Task 1 of docs/superpowers/plans/2026-09-04-phase1a-launcher-and-spike.md
+  - Boox device day (README "Set up the device"), then phase 1b plan (reader, TTS, tutor, onboarding).
