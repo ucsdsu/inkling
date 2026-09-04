@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
-                HomeViewModel::class.java -> HomeViewModel(repo) as T
+                HomeViewModel::class.java -> HomeViewModel(repo, packageManager) as T
                 ParentViewModel::class.java -> ParentViewModel(repo, packageManager, packageName) as T
                 else -> throw IllegalArgumentException("Unknown ViewModel $modelClass")
             }

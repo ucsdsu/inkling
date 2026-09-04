@@ -1,5 +1,9 @@
 package dev.inkling.ui
 
+import android.content.pm.PackageManager
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.inkling.core.BlockDecision
@@ -11,13 +15,26 @@ import dev.inkling.core.Verdict
 import dev.inkling.data.AppRule
 import dev.inkling.data.Repo
 import dev.inkling.data.Settings
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.TimeZone
 
-data class Tile(val packageName: String, val label: String, val fraction: Float, val done: Boolean)
+/** Square edge the launcher icon is rasterized to before Compose scales it down to 40.dp. */
+private const val ICON_PX = 96
+
+/** `icon` is null in pure code and tests; the view model fills it in from the package manager. */
+data class Tile(
+    val packageName: String,
+    val label: String,
+    val fraction: Float,
+    val done: Boolean,
+    val icon: ImageBitmap? = null,
+)
+
 data class HomeState(val childName: String = "", val booksToday: Int = 0, val tiles: List<Tile> = emptyList())
 
 /** Pure. Turns rules, today's spans, and settings into what the kid sees. */
@@ -42,7 +59,7 @@ fun buildHomeState(
     return HomeState(childName, booksToday = 0, tiles = tiles)
 }
 
-class HomeViewModel(private val repo: Repo) : ViewModel() {
+class HomeViewModel(private val repo: Repo, private val pm: PackageManager) : ViewModel() {
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state
 
@@ -55,6 +72,24 @@ class HomeViewModel(private val repo: Repo) : ViewModel() {
         val cal = Calendar.getInstance()
         val minuteOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         val spans = repo.spansToday(child.id, Budget.startOfDay(now, tz))
-        _state.value = buildHomeState(child.name, rules, spans, settings, now, tz, minuteOfDay)
+        val base = buildHomeState(child.name, rules, spans, settings, now, tz, minuteOfDay)
+        // Icon decoding hits the package manager and rasterizes a drawable, so keep it off the main thread.
+        val icons = withContext(Dispatchers.IO) { base.tiles.associate { it.packageName to loadIcon(it.packageName) } }
+        _state.value = base.copy(tiles = base.tiles.map { it.copy(icon = icons[it.packageName]) })
+    }
+
+    /**
+     * The app's launcher icon as a bitmap.
+     *
+     * @param packageName package to look up
+     * @return the icon, or null when the app is no longer installed or its icon will not rasterize
+     */
+    private fun loadIcon(packageName: String): ImageBitmap? = try {
+        pm.getApplicationIcon(packageName).toBitmap(ICON_PX, ICON_PX).asImageBitmap()
+    } catch (e: PackageManager.NameNotFoundException) {
+        null
+    } catch (e: IllegalArgumentException) {
+        // toBitmap throws this for a drawable with no intrinsic size it can honor.
+        null
     }
 }
