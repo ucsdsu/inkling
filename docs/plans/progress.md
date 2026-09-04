@@ -82,6 +82,76 @@ Residual for the next round: `Recognizer` puts a Long in
 falls back to 0 ("Key ... expected Integer but value was a java.lang.Long" in logcat). It came in
 with the phase 1a spike, not with these tasks.
 
+## Review round 1b (2026-09-04)
+
+A review of the reader (phase 1b) found 9 defects. One commit each, each with a unit test or an
+emulator check that fails if the fix is taken out. 111 tests before, 118 after.
+
+- R1 Nothing on the reader path ever asked for RECORD_AUDIO; only the speech spike did. "I'll
+  read" on a fresh install started a recognizer with no permission and the child got silence. The
+  reader route now checks the permission on the tap, launches the system dialog when it is
+  missing, and starts listening from the callback. A refusal shows the unclear card with
+  "Inkling needs the microphone to hear you read." That copy is parent-facing on purpose and
+  still never says wrong or no. `ReaderState.notice` carries it.
+- R2 `history()` pooled every recent attempt, unclear ones included. Three mumbles flagged no
+  words, so they scored 1.0 and promoted him a stage for saying nothing. `recentForBook` now
+  selects `lowConfidence = 0` rows only; with none, lastAccuracy stays null and the shelf still
+  says "try it".
+- R3 `stopListening()` called `stopListening` on the engine, which is the "take what you have"
+  call, so a line he abandoned still came back, coached him, and reached the parent's log. It now
+  calls `Recognizer.cancel()` and marks a `ListenSession` cancelled; the next result or error is
+  dropped once, in `handleRecognition` and in the error path.
+- R4 Hardware Back popped the reader while the TTS kept reading to an empty screen, and the page
+  he was on never reached the reading log. The route calls `reader.leave()` on dispose: cancel the
+  recognizer, stop the speaker, log the page with its mode, clear the book. A configuration change
+  disposes the route too, so that case is excluded by `isChangingConfigurations`. `finish()` is
+  the same call now.
+- R5 `finished×N` counted every ReadEvent on the last page, so paging back and forward over page
+  10 read as five finishes. `timesFinished` counts distinct days
+  (`COUNT(DISTINCT startedAt / 86400000)`).
+- R6 Rotation re-ran `LaunchedEffect(bookId)`, which reopened the book at page 0. `open()` is a
+  no-op when that book is already open; `shouldOpen()` holds the rule.
+- R7 "‹ Books" and "‹ Home" were a 15sp line with 6dp of padding, about 28dp of target. Both are
+  boxes at the shared `TapTarget` minimum now, text centred. `TapTarget` moved to Theme.kt so the
+  shelf and the reader use one number.
+- R8 One var took whichever button was tapped last, so "Read to me" then "I'll read" logged the
+  page as `self` and overstated how much he decoded alone. Two flags per page feed `pageMode()`:
+  tts wins, because he heard the line.
+- R9 The debug long-press faked "the hen is wed" on every book, so on any other title both fakes
+  scored as misses and the coach named a word that is not on the page. `fakeTranscripts(line)`
+  derives both from the open line: r read as w (forgiven, "nice reading"), then the last word
+  started with the wrong letter (coached).
+
+Emulator evidence (boox7, emulator-5554, 2026-09-04):
+- R1: `pm revoke dev.inkling android.permission.RECORD_AUDIO`, open The Big Red Hen, tap
+  "I'll read" -> "Allow Inkling to record audio?" (shots/r1b_mic_prompt.png). "Don't allow" ->
+  the card reads "Inkling needs the microphone to hear you read." `pm grant`, tap again ->
+  "Listening…".
+- R4: tap the coach card, which speaks the chunks and then the word. Left alone it dispatches
+  twice, 14:14:39.625 and 14:14:41.143. With Back pressed 1.0s in, one dispatch at 14:14:08.015,
+  the back mark at 14:14:09.052, and nothing after. The DB gained
+  `15 short-e-hen page 0 tts 14:13:00 -> 14:14:09`: the page was logged by the hardware key, with
+  tts as its mode.
+- R5: two last-page ReadEvents for short-e-hen on one day; the Reading tab reads "finished×1 ·
+  88%" (shots/r1b_parent_reading.png).
+- R6: page 4 of 10, `user_rotation 1`, still page 4 with the same line.
+- R7: the clickable node behind "‹ Home" is [40,88][148,208] and behind "‹ Books" is
+  [32,80][142,200]. 120px at density 320 is 60dp. (shots/r1b_back_target.png)
+- R9: on "The hen is red.", the first long-press gives "Nice reading!" and the second coaches
+  "red" with chunks r|e|d (shots/r1b_good_fake.png, r1b_coach_fake.png).
+- Journey: kid home -> shelf -> The Big Red Hen -> Read to me -> I'll read (granted, listens,
+  lands on unclear because the emulator feeds the mic nothing) -> both fakes -> forward off page
+  10 back to the shelf -> parent PIN -> Reading tab.
+
+Not proven here: R2 has no live evidence, because every unclear reading on the emulator came from
+a recognizer error, and the error path logs no attempt at all. The unit test covers it.
+
+Residual from R4: the Home key is not covered. Inkling is the HOME app, so KEYCODE_HOME
+re-delivers the intent to the singleTask activity instead of stopping it. The reader route is
+never disposed, no lifecycle callback fires, and the TTS keeps talking: chunk replay dispatched
+at 14:21:00.882, Home at 14:21:01.922, another dispatch at 14:21:02.440. Back is fixed; Home
+needs a different hook, probably the HOME intent arriving in onNewIntent.
+
 ## Review round 2 (2026-09-04)
 
 A second review found 4 defects in the service's timing design. Fixed by taking timers out, not
