@@ -11,7 +11,11 @@ object BlockDecision {
         "com.google.android.permissioncontroller",
         "com.google.android.inputmethod.latin",
         "com.android.inputmethod.latin",
-        "com.onyx.android.sdk",           // Boox system overlays
+        // Boox system overlays. This is a guess from the SDK package name: capture the real Onyx
+        // system UI packages on the device with
+        //   adb shell dumpsys window | grep mCurrentFocus
+        // while the status bar, navigation ball, and notification shade are up, and add them here.
+        "com.onyx.android.sdk",
     )
 
     fun decide(
