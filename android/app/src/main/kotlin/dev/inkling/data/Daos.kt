@@ -58,7 +58,8 @@ interface ReadEventDao {
 interface TutorAttemptDao {
     @Insert suspend fun insert(a: TutorAttempt): Long
 
-    @Query("SELECT * FROM TutorAttempt WHERE childId = :childId AND bookId = :bookId ORDER BY at DESC LIMIT 10")
+    /** Scored attempts only: an unclear one flags nothing, so it must not count toward accuracy. */
+    @Query("SELECT * FROM TutorAttempt WHERE childId = :childId AND bookId = :bookId AND lowConfidence = 0 ORDER BY at DESC LIMIT 10")
     suspend fun recentForBook(childId: Long, bookId: String): List<TutorAttempt>
 
     @Query("SELECT * FROM TutorAttempt WHERE childId = :childId ORDER BY at DESC LIMIT :limit")

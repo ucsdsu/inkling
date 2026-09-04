@@ -88,6 +88,9 @@ class Repo(private val db: InklingDb) {
      * Shelf history for one book. [finished] counts how many times the last page was logged.
      * Accuracy pools the ten most recent attempts on the book: 1 - missed words / words attempted.
      * Null when he has never read it aloud, which the shelf shows as "try it" rather than a score.
+     *
+     * Attempts the recognizer was not sure about are dropped first. They flag nothing, so counting
+     * them scored three mumbles as a perfect read and promoted him a stage for saying nothing.
      */
     suspend fun history(childId: Long, bookId: String, pageCount: Int): BookHistory {
         val finished = db.reads().timesFinished(childId, bookId, pageCount - 1)

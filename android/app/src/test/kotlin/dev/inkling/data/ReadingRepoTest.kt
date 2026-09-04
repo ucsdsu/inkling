@@ -29,6 +29,7 @@ class ReadingRepoTest {
         at: Long,
         bookId: String = BOOK,
         totalWords: Int = 8,
+        lowConfidence: Boolean = false,
     ) = TutorAttempt(
         childId = childId,
         bookId = bookId,
@@ -37,7 +38,7 @@ class ReadingRepoTest {
         confidence = 0.9f,
         missed = missed,
         totalWords = totalWords,
-        lowConfidence = false,
+        lowConfidence = lowConfidence,
         at = at,
     )
 
@@ -54,6 +55,15 @@ class ReadingRepoTest {
         val c = repo.ensureChild()
         repo.logAttempt(attempt(c.id, missed = "pen", at = 1_000))
         repo.logAttempt(attempt(c.id, missed = "pen ten hen", at = 2_000))
+        assertEquals(0.75f, repo.history(c.id, BOOK, PAGES).lastAccuracy!!, 0.0001f)
+    }
+
+    @Test fun unclearAttemptsDoNotCountTowardAccuracy() = runBlocking {
+        val c = repo.ensureChild()
+        // Three mumbles flagged nothing. Counted, they read as a perfect four-page book.
+        repeat(3) { i -> repo.logAttempt(attempt(c.id, missed = "", at = 1_000L + i, lowConfidence = true)) }
+        assertNull(repo.history(c.id, BOOK, PAGES).lastAccuracy)
+        repo.logAttempt(attempt(c.id, missed = "pen", at = 4_000, totalWords = 4))
         assertEquals(0.75f, repo.history(c.id, BOOK, PAGES).lastAccuracy!!, 0.0001f)
     }
 
