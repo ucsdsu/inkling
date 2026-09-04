@@ -62,6 +62,28 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
 }
 
 /**
+ * One turn at the mic, and whether its result is still wanted.
+ *
+ * SpeechRecognizer.cancel() is not instant: a result or an error can still land after the child
+ * has tapped "Listening…" off, and coaching him on a read he abandoned is the same as telling him
+ * he got it wrong. The cancel is spent on the first thing that arrives.
+ */
+class ListenSession {
+    private var cancelled = false
+
+    fun start() { cancelled = false }
+
+    fun cancel() { cancelled = true }
+
+    /** True when what just arrived should be used. Clears the cancel it consumes. */
+    fun accept(): Boolean {
+        if (!cancelled) return true
+        cancelled = false
+        return false
+    }
+}
+
+/**
  * The two transcripts the debug long-press feeds the tutor, built from the line on the page so
  * the coach names a word the child can actually see.
  *
@@ -130,6 +152,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     private val speaker = Speaker(context) { }
     private val recognizer = Recognizer(context)
+    private val session = ListenSession()
 
     private var childId: Long = 0
     private var pageStartedAt: Long = 0
@@ -186,15 +209,22 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         usedSelf = true
         _state.value = _state.value.copy(phase = TutorPhase.LISTENING, speakingWord = -1, missedWord = null, chunks = emptyList())
         speaker.stop()
+        session.start()
         recognizer.listen(
             onResult = { transcript, confidence -> handleRecognition(transcript, confidence) },
             // An engine error is the same to the child as silence: nothing gets named or flagged.
-            onError = { _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, speechMode = recognizer.lastMode) },
+            onError = {
+                if (session.accept()) {
+                    _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, speechMode = recognizer.lastMode)
+                }
+            },
         )
     }
 
+    /** He tapped the mic off. Nothing he half-said gets coached or logged. */
     fun stopListening() {
-        recognizer.stop()
+        recognizer.cancel()
+        session.cancel()
         if (_state.value.phase == TutorPhase.LISTENING) _state.value = _state.value.copy(phase = TutorPhase.IDLE)
     }
 
@@ -214,11 +244,13 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         val s = _state.value
         val book = s.book ?: return
         val fakes = fakeTranscripts(book.pages[s.page])
+        session.start()
         handleRecognition(fakes[fakeIndex % fakes.size], 1f)
         fakeIndex++
     }
 
     private fun handleRecognition(transcript: String, confidence: Float) {
+        if (!session.accept()) return
         val before = _state.value
         val book = before.book ?: return
         _state.value = onRecognized(before, transcript, confidence).copy(speechMode = recognizer.lastMode)

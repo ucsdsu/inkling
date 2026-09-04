@@ -81,6 +81,10 @@ class Recognizer(context: Context) {
         s.startListening(intent)
     }
 
+    /** Stop the mic and take the result. */
     fun stop() { sr?.stopListening() }
+
+    /** Stop the mic and throw the result away. What the child means by tapping "Listening…" off. */
+    fun cancel() { sr?.cancel() }
     fun destroy() { sr?.destroy() }
 }

@@ -59,6 +59,28 @@ class ReaderStateTest {
         assertEquals(TutorPhase.GOOD, onRecognized(red, "the hen is wed", 1f).phase)
     }
 
+    @Test fun cancellingTheMicDropsTheResultThatArrivesAnyway() {
+        val session = ListenSession()
+        var phase = TutorPhase.IDLE
+        var logged = 0
+        // The same order the view model calls these in.
+        fun onResult() {
+            if (!session.accept()) return
+            phase = TutorPhase.GOOD
+            logged++
+        }
+        session.start()
+        session.cancel()
+        onResult()
+        assertEquals(TutorPhase.IDLE, phase)
+        assertEquals(0, logged)
+        // The cancel is spent: the next turn at the mic counts.
+        session.start()
+        onResult()
+        assertEquals(TutorPhase.GOOD, phase)
+        assertEquals(1, logged)
+    }
+
     @Test fun debugFakesComeFromTheLineOnThePage() {
         val fakes = fakeTranscripts("The hen is in the pen.")
         assertEquals(listOf("The hen is in the pen.", "The hen is in the ben."), fakes)
