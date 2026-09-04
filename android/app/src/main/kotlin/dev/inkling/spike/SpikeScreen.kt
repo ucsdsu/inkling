@@ -28,6 +28,7 @@ import dev.inkling.core.DiffResult
 import dev.inkling.core.ReadingDiff
 import dev.inkling.data.Repo
 import dev.inkling.data.SpikeRow
+import dev.inkling.speech.Recognizer
 import kotlinx.coroutines.launch
 
 /**

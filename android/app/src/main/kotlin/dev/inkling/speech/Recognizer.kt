@@ -1,4 +1,4 @@
-package dev.inkling.spike
+package dev.inkling.speech
 
 import android.content.Context
 import android.content.Intent
