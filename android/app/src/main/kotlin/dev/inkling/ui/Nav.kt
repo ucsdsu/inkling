@@ -30,12 +30,17 @@ import androidx.navigation.compose.rememberNavController
 import dev.inkling.BuildConfig
 import dev.inkling.service.SetupCheck
 import dev.inkling.spike.SpikeScreen
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
-fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewModel) {
+fun InklingNav(home: HomeViewModel, parent: ParentViewModel, reader: ReaderViewModel, homePresses: StateFlow<Int>) {
     val nav = rememberNavController()
+    val presses by homePresses.collectAsState()
+    LaunchedEffect(presses) {
+        if (presses > 0) nav.navigate("home") { popUpTo("home") { inclusive = true } }
+    }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     NavHost(nav, startDestination = "home",

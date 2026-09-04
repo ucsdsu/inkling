@@ -295,3 +295,7 @@ old binding survives the install pointing at a dead process, and the service sil
 Next:
 - Run the speech spike with Cove on the Boox, then the device journey on real hardware.
 - Capture the real Onyx system UI package names and extend SYSTEM_ALLOWLIST (F11b).
+
+Home key (post round 1b): MainActivity.onNewIntent counts HOME intents; Nav pops to kid home, which
+disposes the reader route and stops speech. Emulator: one TTS dispatch before Home, none after,
+kid home in front. 118 tests green.
