@@ -69,9 +69,12 @@ fun SpikeScreen(repo: Repo) {
             status = "Listening…"
             recognizer.listen(
                 onResult = { t, c ->
+                    // The recognizer reports -1 when it gives no confidence at all. The spike exists
+                    // to measure how often that happens, so a missing score is scored as 1f and the
+                    // line is still diffed and flagged. The raw -1 is what gets stored and shown.
                     transcript = t; confidence = c
                     result = ReadingDiff.score(line, t, if (c < 0) 1f else c)
-                    status = "Heard: \"$t\"  conf=${"%.2f".format(c)}"
+                    status = "Heard: \"$t\"  conf=" + if (c < 0) "n/a" else "%.2f".format(c)
                 },
                 onError = { status = it },
             )
