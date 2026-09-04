@@ -47,9 +47,10 @@ class BudgetTest {
     }
 
     @Test
-    fun closedSpanLongerThanTwoHoursIsAlsoCapped() {
+    fun closedSpanLongerThanTwoHoursCountsInFull() {
+        // The service wrote that end time, so it is real. Only open spans are guesses.
         val spans = listOf(Span("chess", noon - 5 * 60 * minute, noon - 60 * minute))
-        assertEquals(120, Budget.usedMinutesToday(spans, "chess", noon, zone))
+        assertEquals(240, Budget.usedMinutesToday(spans, "chess", noon, zone))
     }
 
     @Test
