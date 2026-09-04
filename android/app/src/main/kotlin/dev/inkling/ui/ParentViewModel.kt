@@ -86,7 +86,9 @@ class ParentViewModel(private val repo: Repo, private val pm: PackageManager, pr
         val child = repo.ensureChild()
         val s = repo.settings(child.id)
         if (now < s.lockoutUntil) return false
-        if (s.pinHash == null || s.pinHash == Pin.hash(pin)) {
+        // No PIN set means nothing can unlock. First-run PIN creation goes through PinMode.SET, never here.
+        if (s.pinHash == null) return false
+        if (s.pinHash == Pin.hash(pin)) {
             repo.saveSettings(s.copy(pinFailures = 0, lockoutUntil = 0)); return true
         }
         val failures = s.pinFailures + 1
