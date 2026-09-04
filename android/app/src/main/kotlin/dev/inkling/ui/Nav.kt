@@ -53,7 +53,7 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
             when (val mode = pinMode(s)) {
                 null -> Box(Modifier.fillMaxSize().background(InklingColors.Paper))
                 else -> PinScreen(
-                    hasPin = mode == PinMode.UNLOCK,
+                    mode = mode,
                     tryPin = { parent.tryPin(it, System.currentTimeMillis()) },
                     lockoutSeconds = { parent.lockoutRemainingSeconds(System.currentTimeMillis()) },
                     onSetPin = { parent.setPin(it) },
@@ -80,8 +80,19 @@ fun InklingNav(home: HomeViewModel, parent: ParentViewModel) {
                         Toast.makeText(ctx, "Saved ${f.absolutePath}", Toast.LENGTH_LONG).show()
                     }
                 },
-                onChangePin = { parent.setPin(""); nav.navigate("pin") },
+                onChangePin = { nav.navigate("pin/set") },
                 onLock = { nav.navigate("home") { popUpTo("home") { inclusive = true } } },
+            )
+        }
+        composable("pin/set") {
+            LaunchedEffect(Unit) { parent.refresh() }
+            PinScreen(
+                mode = PinMode.SET,
+                tryPin = { false },
+                lockoutSeconds = { 0 },
+                onSetPin = { parent.setPin(it) },
+                onUnlocked = { nav.popBackStack() },
+                onBack = { nav.popBackStack() },
             )
         }
         composable("spike") { SpikeScreen(dev.inkling.InklingApp.instance.repo) }

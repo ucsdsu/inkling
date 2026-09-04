@@ -66,8 +66,11 @@ class ParentViewModel(private val repo: Repo, private val pm: PackageManager, pr
 
     fun setKidsMode(on: Boolean) = update { it.copy(kidsModeOn = on) }
     fun setCeiling(minutes: Int) = update { it.copy(deviceCeilingMinutes = minutes.coerceIn(0, 600)) }
-    /** Empty [pin] clears the PIN so the next PIN screen sets a new one. */
-    fun setPin(pin: String) = update { it.copy(pinHash = if (pin.isEmpty()) null else Pin.hash(pin), pinFailures = 0, lockoutUntil = 0) }
+    /** Stores a new parent PIN. An empty [pin] is rejected: clearing the hash would open the device. */
+    fun setPin(pin: String) {
+        if (pin.isEmpty()) return
+        update { it.copy(pinHash = Pin.hash(pin), pinFailures = 0, lockoutUntil = 0) }
+    }
 
     fun setApp(row: AppRow, enabled: Boolean, cap: Int) = viewModelScope.launch {
         val child = repo.ensureChild()

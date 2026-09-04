@@ -30,18 +30,27 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 /**
- * @param hasPin false on first use: the entered 4 digits become the PIN.
+ * @param mode [PinMode.UNLOCK] checks the stored PIN, [PinMode.SET] takes the same 4 digits twice
+ *   and only then calls [onSetPin].
  */
 @Composable
-fun PinScreen(hasPin: Boolean, tryPin: suspend (String) -> Boolean, lockoutSeconds: suspend () -> Int, onSetPin: (String) -> Unit, onUnlocked: () -> Unit, onBack: () -> Unit) {
+fun PinScreen(mode: PinMode, tryPin: suspend (String) -> Boolean, lockoutSeconds: suspend () -> Int, onSetPin: (String) -> Unit, onUnlocked: () -> Unit, onBack: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var locked by remember { mutableIntStateOf(0) }
-    var message by remember { mutableStateOf(if (hasPin) "Enter parent PIN" else "Choose a 4-digit parent PIN") }
+    var flow by remember { mutableStateOf(SetPinFlow()) }
+    var message by remember { mutableStateOf(if (mode == PinMode.UNLOCK) "Enter parent PIN" else SET_PIN_FIRST) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { locked = lockoutSeconds() }
 
     fun submit(p: String) = scope.launch {
-        if (!hasPin) { onSetPin(p); onUnlocked(); return@launch }
+        if (mode == PinMode.SET) {
+            when (val step = flow.submit(p)) {
+                is SetPinStep.NeedConfirm -> { flow = step.flow; message = step.flow.prompt; pin = "" }
+                is SetPinStep.Mismatch -> { flow = step.flow; message = SET_PIN_MISMATCH; pin = "" }
+                is SetPinStep.Done -> { onSetPin(step.pin); onUnlocked() }
+            }
+            return@launch
+        }
         if (tryPin(p)) onUnlocked() else {
             locked = lockoutSeconds()
             message = if (locked > 0) "Try again in $locked seconds" else "That's not it"
