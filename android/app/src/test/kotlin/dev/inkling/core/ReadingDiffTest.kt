@@ -47,6 +47,22 @@ class ReadingDiffTest {
     }
 
     @Test
+    fun reductionIsNotChainedWithSubstitution() {
+        // "grill" -> "rill" -> "will" and "free" -> "ree" -> "wee" are different words, not lisps.
+        assertEquals(listOf("grill"), ReadingDiff.score("grill", "will", 0.9f).missed)
+        assertEquals(listOf("free"), ReadingDiff.score("free", "wee", 0.9f).missed)
+    }
+
+    @Test
+    fun singleStepPatternsStillPass() {
+        // Cluster reduction alone: a documented 4-year-old pattern.
+        assertEquals(emptyList<String>(), ReadingDiff.score("black", "back", 0.9f).missed)
+        assertEquals(emptyList<String>(), ReadingDiff.score("stop", "top", 0.9f).missed)
+        // Substitution alone.
+        assertEquals(emptyList<String>(), ReadingDiff.score("red", "wed", 0.9f).missed)
+    }
+
+    @Test
     fun lowConfidenceNeverProducesMiss() {
         val r = ReadingDiff.score(line, "the big red hen sat in the pin", 0.3f)
         assertTrue(r.lowConfidence)

@@ -74,9 +74,17 @@ object ReadingDiff {
         return articulationVariants(expected).contains(heard)
     }
 
-    /** Forms a typical 3-to-5-year-old might produce for a correctly decoded word. */
+    /**
+     * Forms a typical 3-to-5-year-old might produce for a correctly decoded word.
+     *
+     * Substitution and cluster reduction stay separate on purpose. Composing them accepted a
+     * different word entirely: "grill" reduces to "rill", which then substitutes to "will", and
+     * "free" reduces to "ree", which substitutes to "wee". Both are real misreads, so the two
+     * variant sets are unioned, never chained.
+     */
     private fun articulationVariants(w: String): Set<String> {
         val out = mutableSetOf<String>()
+        // r/l -> w, th -> f or d.
         val subs = listOf("r" to "w", "l" to "w", "th" to "f", "th" to "d")
         var forms = setOf(w)
         for ((from, to) in subs) {
@@ -90,14 +98,6 @@ object ReadingDiff {
                 out += w.drop(1)          // drop first consonant: stop -> top
                 out += c[0] + w.drop(2)   // drop second: truck -> tuck
             }
-        }
-        // Reduction combined with r/l/th substitution, e.g. "truck" -> "tuck" is already covered;
-        // "thrill" -> "fwill" would need both, handled by applying subs to reduced forms.
-        val reduced = out.toList()
-        for (r in reduced) {
-            var f = setOf(r)
-            for ((from, to) in subs) f = f + f.map { it.replace(from, to) }
-            out += f
         }
         return out
     }
