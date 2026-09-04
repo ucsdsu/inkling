@@ -62,6 +62,16 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
 }
 
 /**
+ * How a page gets logged. TTS wins over the tutor: once the line has been read to him, that is
+ * how he got through the page, whatever he did after.
+ */
+fun pageMode(usedTts: Boolean, usedSelf: Boolean): String = when {
+    usedTts -> ReadMode.TTS
+    usedSelf -> ReadMode.SELF
+    else -> ReadMode.LOOK
+}
+
+/**
  * Whether the reader should load [requested]. False when that book is already open: rotation
  * recreates the route and re-runs its effect, and reopening rewound the child to page 0.
  */
@@ -108,7 +118,8 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     private var childId: Long = 0
     private var pageStartedAt: Long = 0
-    private var pageMode: String = ReadMode.LOOK
+    private var usedTts = false
+    private var usedSelf = false
     private var fakeIndex = 0
 
     fun loadShelf() = viewModelScope.launch {
@@ -147,7 +158,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     fun speakLine() {
         val s = _state.value
         val book = s.book ?: return
-        pageMode = ReadMode.TTS
+        usedTts = true
         speaker.speakLine(
             line = book.pages[s.page],
             onWord = { i -> _state.value = _state.value.copy(speakingWord = i) },
@@ -157,7 +168,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     fun listen() {
         if (_state.value.book == null) return
-        pageMode = ReadMode.SELF
+        usedSelf = true
         _state.value = _state.value.copy(phase = TutorPhase.LISTENING, speakingWord = -1, missedWord = null, chunks = emptyList())
         speaker.stop()
         recognizer.listen(
@@ -211,7 +222,8 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     private fun startPage() {
         pageStartedAt = System.currentTimeMillis()
-        pageMode = ReadMode.LOOK
+        usedTts = false
+        usedSelf = false
     }
 
     private fun logPage() {
@@ -219,7 +231,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         val book = s.book ?: return
         val id = childId
         val page = s.page
-        val mode = pageMode
+        val mode = pageMode(usedTts, usedSelf)
         val startedAt = pageStartedAt
         viewModelScope.launch { repo.logPage(id, book.id, page, mode, startedAt, System.currentTimeMillis()) }
     }

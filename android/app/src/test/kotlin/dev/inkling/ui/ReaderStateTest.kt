@@ -59,6 +59,13 @@ class ReaderStateTest {
         assertEquals(TutorPhase.GOOD, onRecognized(red, "the hen is wed", 1f).phase)
     }
 
+    @Test fun ttsWinsTheModeForThePage() {
+        // He tapped "Read to me" and then tried it himself: he heard the line, so the log says tts.
+        assertEquals(ReadMode.TTS, pageMode(usedTts = true, usedSelf = true))
+        assertEquals(ReadMode.SELF, pageMode(usedTts = false, usedSelf = true))
+        assertEquals(ReadMode.LOOK, pageMode(usedTts = false, usedSelf = false))
+    }
+
     @Test fun reopeningTheOpenBookLeavesThePageAlone() {
         // Rotation re-runs the route's open effect. Reloading it rewound him to page 0.
         assertFalse(shouldOpen("short-e-hen", "short-e-hen"))
