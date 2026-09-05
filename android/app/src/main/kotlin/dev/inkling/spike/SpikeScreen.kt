@@ -13,23 +13,21 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import dev.inkling.core.DiffResult
-import dev.inkling.core.ReadingDiff
 import dev.inkling.data.Repo
-import dev.inkling.data.SpikeRow
 import dev.inkling.speech.Recognizer
-import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
  * Gate 0. Shows one line, listens, diffs, and asks the parent for a verdict.
@@ -38,57 +36,65 @@ import kotlinx.coroutines.launch
 @Composable
 fun SpikeScreen(repo: Repo) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val run: SpikeRunViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = SpikeRunViewModel(repo) as T
+        },
+    )
+    val state by run.state.collectAsState()
     val recognizer = remember { Recognizer(ctx) }
-    DisposableEffect(Unit) { onDispose { recognizer.destroy() } }
+    DisposableEffect(Unit) { onDispose { recognizer.destroy(); run.cancelLiveAttempt() } }
 
-    var index by remember { mutableIntStateOf(0) }
-    var status by remember { mutableStateOf("Tap Listen, then read the line.") }
-    var transcript by remember { mutableStateOf("") }
-    var confidence by remember { mutableStateOf(-1f) }
-    var result by remember { mutableStateOf<DiffResult?>(null) }
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
 
-    val line = SpikeLines.lines[index % SpikeLines.lines.size]
-
-    fun record(verdict: String) {
-        val r = result ?: return
-        scope.launch {
-            repo.addSpike(SpikeRow(expected = line, transcript = transcript, confidence = confidence,
-                flagged = r.missed.joinToString(" "), verdict = verdict, at = System.currentTimeMillis()))
-            index += 1; result = null; transcript = ""; status = "Saved. Next line."
-        }
-    }
+    val line = SpikeLines.lines[state.lineIndex]
 
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Speech test  ${index + 1} of ${SpikeLines.lines.size}", fontSize = 14.sp)
-        Text(line, fontSize = 30.sp)
-        if (!recognizer.available) Text("This device has no speech recognizer.")
-        if (!granted) Button(onClick = { ask.launch(Manifest.permission.RECORD_AUDIO) }) { Text("Allow microphone") }
-        Button(enabled = granted && recognizer.available, onClick = {
-            status = "Listening…"
-            recognizer.listen(
-                onResult = { t, c ->
-                    // The recognizer reports -1 when it gives no confidence at all. The spike exists
-                    // to measure how often that happens, so a missing score is scored as 1f and the
-                    // line is still diffed and flagged. The raw -1 is what gets stored and shown.
-                    transcript = t; confidence = c
-                    result = ReadingDiff.score(line, t, if (c < 0) 1f else c)
-                    val conf = if (c < 0) "n/a" else "%.2f".format(c)
-                    status = "Heard: \"$t\"  conf=$conf via ${recognizer.lastMode}"
-                },
-                onError = { status = "$it via ${recognizer.lastMode}" },
+        if (state.complete) {
+            val summary = summarizeSpike(state.savedRows)
+            Text("Speech test complete", fontSize = 24.sp)
+            if (summary.falseFlagRate == null) {
+                Text("Insufficient data: this run had no parent-confirmed correct reads.")
+            } else {
+                Text("False flags: ${summary.falselyFlagged} of ${summary.correctReads} parent-confirmed correct reads (${"%.0f".format(summary.falseFlagRate * 100)}%).")
+            }
+            Text(
+                if (summary.hasGateSample) "Gate sample complete: 20 correct reads measured."
+                else "Gate sample incomplete: ${summary.correctReads} correct reads measured; 20 are required.",
             )
-        }) { Text("Listen") }
-        Text(status)
-        result?.let { r ->
-            Text(if (r.lowConfidence) "Low confidence, nothing flagged" else "Flagged: ${r.missed.ifEmpty { listOf("none") }.joinToString(" ")}")
-            Text("Did he actually read it right?", fontSize = 14.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { record("correct") }) { Text("Read it right") }
-                Button(onClick = { record("wrong") }) { Text("Missed a word") }
-                Button(onClick = { record("unclear") }) { Text("Unclear") }
+            summary.passesGate?.let { passed ->
+                Text(if (passed) "Gate result: pass (10% or fewer false flags)." else "Gate result: fail (over 10% false flags).")
+            }
+            Text("All 20 rows were saved. Reopen this screen for a fresh run; earlier rows stay in the CSV.")
+        } else {
+            Text("Speech test  ${state.lineIndex + 1} of ${SpikeLines.lines.size}", fontSize = 14.sp)
+            Text(line, fontSize = 30.sp)
+            if (!recognizer.available) Text("This device has no speech recognizer.")
+            if (!granted) Button(onClick = { ask.launch(Manifest.permission.RECORD_AUDIO) }) { Text("Allow microphone") }
+            Button(enabled = granted && recognizer.available && !state.saving, onClick = {
+                recognizer.cancel()
+                val token = run.beginListen() ?: return@Button
+                recognizer.listen(
+                onResult = { t, c ->
+                    run.onResult(token, t, c)
+                },
+                onError = { message ->
+                    run.onError(token, message)
+                },
+                )
+            }) { Text("Listen") }
+            Text(state.status)
+            state.pending?.let { pending ->
+                val r = pending.diff
+                Text(if (r.lowConfidence) "Low confidence, nothing flagged" else "Flagged: ${r.missed.ifEmpty { listOf("none") }.joinToString(" ")}")
+                Text("Did he actually read it right?", fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(enabled = !state.saving, onClick = { run.record("correct") }) { Text("Read it right") }
+                    Button(enabled = !state.saving, onClick = { run.record("wrong") }) { Text("Missed a word") }
+                    Button(enabled = !state.saving, onClick = { run.record("unclear") }) { Text("Unclear") }
+                }
             }
         }
     }
