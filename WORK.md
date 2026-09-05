@@ -1,42 +1,49 @@
 Project: Inkling (kids mode + reading tutor for Android e-ink tablets)
-Owner chat / channel: Claude Code, homeschool sessions
+Owner chat / channel: Jon, Codex pre-Boox handoff from Fable
 Last updated: 2026-09-04
 
 GOAL:
-  Phase 1a on the Boox Go Color 7: Cove cannot leave kids mode, Jon can with a PIN,
-  usage is logged per app, and the speech spike has a measured false-positive rate.
+  Close the remaining software defects before the first Boox device acceptance run.
 
 MUST NOT BREAK:
-  - Jon's own reading on the device (stock Boox launcher reachable from parent screen)
-  - No factory reset, no Device Owner in phase 1
-  - Kid experience works with Wi-Fi off
-  - No rewards UI (stars, coins, streaks), no reading-gated games
+  - Each child's reading history and app limits stay separate.
+  - One shared parent PIN protects all profiles (approved by Jon, 2026-09-04).
+  - Kid experience works with Wi-Fi off. No online speech fallback.
+  - Stock Boox launcher remains reachable from parent screen.
+  - No reset, Device Owner, rewards, or reading-gated games.
 
 DONE WHEN:
-  - Spec section "Verification for phase 1a" passes on the device
-  - docs/plans/progress.md records the spike false-positive rate
+  - Profile -> six-word placement -> first shelf -> finish book -> Reading / Next up
+    -> add child -> switch back passes on the emulator.
+  - Duplicate finish, placement progression, Home during setup, shared PIN upgrades,
+    and child usage isolation have regression checks.
+  - Speech callbacks cannot cross pages, placement words, retries, books, or children.
+  - Read aloud selects an installed offline English voice and reports failure without
+    recording the page as TTS.
+  - The speech spike saves each verdict once, stops after 20 lines, and reports the
+    false-flag numerator, correct-read denominator, and whether the 20-correct sample exists.
 
 METRIC:
-  - `cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug` → exit 0
-  - Spike: flagged-correct-reads / 20 ≤ 0.10
+  - 183 unit tests pass; debug APK builds.
+  - Emulator walkthrough preserves Cove's original records after switching.
 
 VERIFY:
-  - Unit tests + APK build (commands above)
-  - Real device journey on the Boox, photographed, attached to the PR
+  - cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
+  - See docs/plans/progress.md for emulator evidence and the review matrix.
+  - Robolectric view-model tests must install a test Main dispatcher and reset it in
+    teardown; runBlocking plus the paused Android main looper can deadlock join().
 
 STOP / ASK JON FIRST:
-  - Factory reset or Device Owner setup
-  - Any cloud API call from the app
-  - Publishing to Play, F-Droid, or a public release
-  - Anything that touches Jon's Google account on the device
+  - Factory reset, Device Owner, cloud API calls, account changes, publishing.
 
 OUT OF SCOPE:
-  - Reader, TTS, tutor UI, onboarding (phase 1b)
-  - Generated books, images, PDF import, sync (phase 2)
+  - Generated books, images, PDF import, sync, and new feature/design work.
 
 CURRENT PHASE:
-  - 1a built and reviewed (3 rounds) on the boox7 emulator; 78 unit tests green.
-  - Waiting on the Boox for: speech spike with Cove, Onyx system package names, Home-button behavior.
+  - Phase 1c and the bounded pre-Boox speech fixes are verified locally.
+  - Overall hardware acceptance remains open: actual Boox launcher/blocking behavior,
+    e-ink refresh, offline speech availability, and Cove's 20-line speech spike.
 
 NEXT:
-  - Boox device day (README "Set up the device"), then phase 1b plan (reader, TTS, tutor, onboarding).
+  - Independent Astra review is complete. Run docs/boox-acceptance.md on the Boox
+    after Jon approves the device trial.

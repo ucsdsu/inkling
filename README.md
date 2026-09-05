@@ -13,8 +13,11 @@ First device: Onyx BOOX Go Color 7 Gen II. First tester: a 4-year-old.
 
 ## Status
 
-Phase 1a in progress. See [WORK.md](WORK.md) for the current contract and
+Phase 1c is implemented and emulator-tested. Real Boox and child-speech verification remain open. See [WORK.md](WORK.md) for the current contract and
 [docs/plans/progress.md](docs/plans/progress.md) for what has shipped.
+
+Use [the Boox acceptance checklist](docs/boox-acceptance.md) for the device trial
+and the steps to return to the stock launcher.
 
 ## Design
 
@@ -40,17 +43,29 @@ Requirements: JDK 17, Android SDK with platform 34 and build-tools 34.
 
 3. Install on a device over USB.
 
+   Existing database version 3 profiles are retained. Earlier pre-release database versions
+   use destructive migration; back up their app data before upgrading.
+
    ```bash
    adb install -r android/app/build/outputs/apk/debug/app-debug.apk
    ```
 
 ## Set up the device
 
-1. Open Settings > Apps > Default apps > Home app. Choose Inkling.
-2. Open Settings > Accessibility. Enable the Inkling service.
-3. Open Inkling. Long-press the gear. Set a PIN.
-4. In the Apps tab, switch on the apps the child may use.
-5. Switch Kids mode on.
+1. Open Inkling. Enter a child name, age, and interests. Complete or skip the 6-word placement.
+2. Open Settings > Apps > Default apps > Home app. Choose Inkling.
+3. Open Settings > Accessibility. Enable the Inkling service.
+4. Open Inkling. Long-press the gear. Set a PIN.
+5. In the Apps tab, switch on the apps the child may use.
+6. Switch Kids mode on.
+
+The parent PIN and lockout apply to every child. Reading records and app limits remain
+separate. For older profiles with different PINs, the oldest established PIN is retained.
+
+Speech uses Android's on-device recognizer (Android 12 or newer with an installed offline
+language model). If unavailable, the app shows a setup notice and never retries online.
+Reading, read-aloud, and placement Skip remain available. Boox speech support still needs
+testing; the Vosk fallback has not been implemented.
 
 ## License
 

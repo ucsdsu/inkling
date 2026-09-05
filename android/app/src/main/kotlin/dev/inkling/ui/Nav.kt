@@ -57,7 +57,10 @@ fun InklingNav(
     var start by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { start = if (onboarding.hasChild()) "home" else ONBOARD_PROFILE }
     LaunchedEffect(presses, start) {
-        if (presses > 0 && start != null) nav.navigate("home") { popUpTo("home") { inclusive = true } }
+        if (presses > 0 && start != null) {
+            val destination = homeDestination(onboarding.hasChild())
+            nav.navigate(destination) { popUpTo(nav.graph.id) { inclusive = true } }
+        }
     }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -246,3 +249,6 @@ private fun Context.activity(): Activity? {
     }
     return null
 }
+
+/** Home keeps an unconfigured device in setup. */
+fun homeDestination(hasChild: Boolean): String = if (hasChild) "home" else ONBOARD_PROFILE

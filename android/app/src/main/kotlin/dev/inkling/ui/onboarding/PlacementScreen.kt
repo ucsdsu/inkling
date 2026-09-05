@@ -52,9 +52,10 @@ fun PlacementScreen(
         ) {
             Text(word, fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 40.sp, color = InklingColors.Ink)
             Spacer(Modifier.height(12.dp))
-            Box(Modifier.height(24.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
                 val line = when {
                     micDenied -> MIC_DENIED
+                    state.notice != null -> state.notice
                     state.listening -> "Listening…"
                     else -> resultLine(state).orEmpty()
                 }

@@ -23,6 +23,11 @@ interface DeviceStateDao {
 
 @Dao
 interface SettingsDao {
+    @Query("SELECT * FROM Settings WHERE pinHash IS NOT NULL ORDER BY childId LIMIT 1")
+    suspend fun parentSecurity(): Settings?
+    @Query("UPDATE Settings SET pinHash = :hash, pinFailures = :failures, lockoutUntil = :until")
+    suspend fun shareParentSecurity(hash: String?, failures: Int, until: Long)
+
     @Query("SELECT * FROM Settings WHERE childId = :childId") fun flow(childId: Long): Flow<Settings?>
     @Query("SELECT * FROM Settings WHERE childId = :childId") suspend fun get(childId: Long): Settings?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(s: Settings)

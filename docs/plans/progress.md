@@ -299,3 +299,99 @@ Next:
 Home key (post round 1b): MainActivity.onNewIntent counts HOME intents; Nav pops to kid home, which
 disposes the reader route and stops speech. Emulator: one TTS dispatch before Home, none after,
 kid home in front. 118 tests green.
+
+## Codex phase 1c handoff closure (2026-09-04)
+
+Jon confirmed scope: finish the merged onboarding, profiles, and Next up integration and review.
+Jon approved one shared parent PIN across children. No new product features or public release.
+
+Verification: 161 tests, 0 failures, 0 errors; `cd android && ./gradlew
+:app:testDebugUnitTest :app:assembleDebug` passed. `git diff --check` passed.
+Independent read-only review found the progression and profile-PIN defects below; its precision
+review caught the existing-v3 upgrade case. All three findings are closed after fixes and tests.
+
+Review/fix matrix (paths below are relative to android/app/src):
+
+| Finding | Status | Implementation | Regression |
+|---|---|---|---|
+| New child loses parent PIN | DONE | main/kotlin/dev/inkling/data/Repo.kt, data/Daos.kt | RepoTest.parentPinAndLockoutAreSharedWithoutChangingChildLimits |
+| Existing v3 child can still have no PIN | DONE | main/kotlin/dev/inkling/data/Repo.kt | RepoTest.existingUnprotectedProfileInheritsEstablishedPinOnUpgrade |
+| Placement above stage 0 prevents progress | DONE | main/kotlin/dev/inkling/ui/ReaderViewModel.kt | ReaderStateTest.masteringPlacementStageAdvancesWithoutEarlierBooks |
+| Repeated Finish can create duplicate children | DONE | main/kotlin/dev/inkling/ui/onboarding/OnboardingViewModel.kt | OnboardingViewModelTest.repeatedFinishCreatesOneChildAndNavigatesOnce |
+| Home exits first-run setup with no child | DONE | main/kotlin/dev/inkling/ui/Nav.kt | NavStateTest.homeRequiresAChild; emulator Home on fresh database remains on profile form |
+| Same app can keep another child's usage span | DONE | main/kotlin/dev/inkling/data/Repo.kt | RepoTest.sameAppForAnotherChildStartsTheirOwnUsageSpan |
+| Speech silently retries online | DONE | main/kotlin/dev/inkling/speech/Recognizer.kt | RecognizerTest missing-language and unavailable-engine checks |
+
+Emulator walkthrough, emulator-5554 / boox7 / Android 14:
+- Existing Cove profile retained through install. Set temporary QA PIN, add temporary second
+  child with interests, skip all 6 placement words, see first-shelf summary, enter kid home.
+- Finish The Cat and the Hat by turning past page 10. New child reads "1 book today";
+  Parent Reading reads "finished×1". Next up shows the short-a Try it and short-e read-to-me cards.
+- Second child offers "Enter parent PIN" and accepts the established PIN, never SET.
+- Switch to Cove: all books still "not started", home reads "Hi, Cove." and "0 books today."
+- Fresh database: profile form on launch and still profile form after hardware Home.
+- With mic permission granted, the missing offline model shows the explicit setup notice on
+  placement. It stays on cat; Skip remains available. No online retry.
+- Original database restored after QA. All rows in Child, DeviceState, Settings, AppRule,
+  UsageEvent, ReadEvent, TutorAttempt, and SpikeRow compare identical with the pre-QA snapshot.
+  Microphone permission restored to denied. Final APK installed, original Cove home visible.
+
+Proof screenshots are outside the repository:
+`/Users/jonstenstrom/.codex/visualizations/2026/09/04/01a06e88-c72f-7452-99b2-d8b5dec0cf26/inkling-proof/`
+(profile, first shelf, reader, Next up, switch back, Home during setup, offline notice, restored home).
+No PR or public release was created. Changes remain local for Jon's review.
+
+Residuals: no open findings from this scoped review. Overall device acceptance remains open:
+actual Boox accessibility/Home/system packages, e-ink refresh, offline language-model availability,
+TTS audibility, and Cove's 20-line false-positive measurement. Android below 12 has no supported
+on-device recognizer through this wrapper; Vosk remains unimplemented. This emulator walkthrough
+covers portrait tablet layout, not phone or landscape layouts.
+
+Encoded test lesson in WORK.md: view-model tests install/reset a test Main dispatcher to avoid
+Robolectric paused-looper deadlocks. Shared-core sync was blocked by filesystem permissions;
+local core rules were read. No shared-core changes made.
+
+## Pre-Boox speech closure (2026-09-04)
+
+Astra reviewed the complete phase plan before implementation. The bounded work closed 3 software
+defects and left device questions for the Boox run.
+
+| Finding | Status | Implementation | Regression |
+|---|---|---|---|
+| Stale recognition changes a later page, placement word, retry, book, or child | DONE | `speech/CallbackSession.kt`, `speech/Recognizer.kt`, `ui/ReaderViewModel.kt`, `ui/onboarding/OnboardingViewModel.kt` | `RecognizerTest` gives each attempt a separate platform engine; view-model tests deliver result/error callbacks out of order and inspect stored attempts |
+| Read aloud can use a network voice or log TTS after failure | DONE | `speech/Speaker.kt`, `ui/ReaderViewModel.kt` | `SpeakerTest` selects only offline English; `ReaderViewModelSpeechTest` proves async failure stores `look`, while a prior completed reading remains `tts` |
+| Spike can double-save a verdict, reset on rotation, or wrap after line 20 | DONE | `spike/SpikeRun.kt`, `spike/SpikeScreen.kt` | `SpikeRunViewModelTest` suspends a Room save through UI disposal and proves one row/exact next line; `SpikeRunTest` covers 0/20, 1/20, 2/20 and 3/20 samples |
+
+Verification: 183 tests, 0 failures, 0 errors; `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home ./gradlew :app:testDebugUnitTest :app:assembleDebug` passed. `git diff
+--check` passed. The debug APK is at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+The spike terminal reports false flags only among parent-confirmed correct reads. A run with fewer
+than 20 correct reads is labeled an incomplete Gate 0 sample even when its observed rate is 0%.
+Reopening the screen starts a separate run while preserving every prior row in the CSV.
+
+Fresh Astra review found no remaining must-fix issue after checking the complete diff and the
+recognizer, TTS, state, and duplicate-write boundaries.
+
+Final emulator evidence (Android 14, emulator-5554):
+- Reader and offline notice fit portrait and landscape. Page turn reaches page 2; Home returns
+  to kid home and Back returns to the shelf.
+- Final APK requests `en-us-x-iog-seanet-embedded` for read aloud. The missing recognition model
+  shows the offline setup notice. Actual voice audibility remains unverified.
+- Temporary QAChild completes all 6 Skip steps and the first-shelf summary. The existing QA PIN
+  unlocks that child. Switching back to Cove preserves access to Reading and Next up.
+- The speech-test offline notice and line number are identical before and after rotation on the
+  final APK. Saved-result, in-flight-save, duplicate-save, and 20-row completion behavior use the
+  Room/view-model regressions because this emulator has no offline recognition model.
+- Restored the original database and reopened the final APK. All rows in all 10 tables compare
+  equal to the original snapshot, including child identity and table cardinality. Microphone
+  denial and its permission flags, plus portrait rotation settings, are restored.
+- Screenshots are outside the repository at
+  `/Users/jonstenstrom/.codex/visualizations/2026/09/05/01a06ee4-9219-7810-bf54-c7289a97d87f/inkling-proof/`.
+- Final APK SHA-256: `6465c86208750cdd41f3c9b977c6a0c493ae9a73f21f6308cda480cb19f12f98`.
+
+Hardware acceptance remains Boox launcher/accessibility/system packages and reboot, e-ink refresh, installed offline
+recognition, audible offline TTS, and Cove's 20-correct-read spike. Vosk remains out of scope until
+device evidence shows the built-in on-device recognizer cannot meet Gate 0. Warning/quiet-hour
+editing, week summary, and vendor e-ink refresh hooks remain unimplemented plan discrepancies; the
+current contract excludes them pending observed need.

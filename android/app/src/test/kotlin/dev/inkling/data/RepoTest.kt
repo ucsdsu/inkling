@@ -27,6 +27,48 @@ class RepoTest {
     }
     @After fun tearDown() { db.close() }
 
+    @Test fun existingUnprotectedProfileInheritsEstablishedPinOnUpgrade() = runBlocking {
+        val a = repo.addChild("A", 4, "", 0)
+        val b = repo.addChild("B", 6, "", 2)
+        db.settings().upsert(Settings(childId = a.id, pinHash = Pin.hash("1234"), pinFailures = 3, lockoutUntil = 9000))
+        db.settings().upsert(Settings(childId = b.id, deviceCeilingMinutes = 25))
+        val upgraded = repo.settings(b.id)
+        assertEquals(Pin.hash("1234"), upgraded.pinHash)
+        assertEquals(3, upgraded.pinFailures)
+        assertEquals(9000L, upgraded.lockoutUntil)
+        assertEquals(25, upgraded.deviceCeilingMinutes)
+        assertEquals(b, repo.activeChild())
+        assertEquals(listOf(a, b), repo.children())
+        assertEquals(upgraded, repo.settings(b.id))
+    }
+
+    @Test fun parentPinAndLockoutAreSharedWithoutChangingChildLimits() = runBlocking {
+        val a = repo.addChild("A", 4, "chess", 0)
+        repo.saveSettings(repo.settings(a.id).copy(pinHash = Pin.hash("1234"), deviceCeilingMinutes = 15))
+        val b = repo.addChild("B", 6, "ocean", 2)
+        assertEquals(Pin.hash("1234"), repo.settings(b.id).pinHash)
+        val bLimits = repo.settings(b.id).deviceCeilingMinutes
+        repo.saveSettings(repo.settings(b.id).copy(pinHash = Pin.hash("5678"), pinFailures = 3, lockoutUntil = 9000))
+        assertEquals(Pin.hash("5678"), repo.settings(a.id).pinHash)
+        assertEquals(3, repo.settings(a.id).pinFailures)
+        assertEquals(9000L, repo.settings(a.id).lockoutUntil)
+        assertEquals(15, repo.settings(a.id).deviceCeilingMinutes)
+        assertEquals(bLimits, repo.settings(b.id).deviceCeilingMinutes)
+        repo.setActiveChild(a.id)
+        assertEquals(Pin.hash("5678"), repo.settings(repo.activeChild()!!.id).pinHash)
+        assertEquals(listOf(a, b), repo.children())
+    }
+
+    @Test fun sameAppForAnotherChildStartsTheirOwnUsageSpan() = runBlocking {
+        val a = repo.addChild("A", 4, "", 0)
+        val b = repo.addChild("B", 6, "", 0)
+        repo.openSpanIfChanged(a.id, "com.chess", 1000)
+        repo.openSpanIfChanged(b.id, "com.chess", 2000)
+        assertEquals(2000L, repo.spansToday(a.id, 0).single().endedAt)
+        assertEquals(2000L, repo.spansToday(b.id, 0).single().startedAt)
+        assertNull(repo.spansToday(b.id, 0).single().endedAt)
+    }
+
     @Test fun activeChildIsNullOnFreshDb() = runBlocking {
         assertNull(repo.activeChild())
         assertEquals(emptyList<Child>(), repo.children())

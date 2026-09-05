@@ -6,6 +6,11 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NavStateTest {
+    @Test fun homeRequiresAChild() {
+        assertEquals(ONBOARD_PROFILE, homeDestination(false))
+        assertEquals("home", homeDestination(true))
+    }
+
     @Test fun unloadedStateHasNoPinMode() {
         assertNull(pinMode(ParentState()))
         // A settings row that arrived without the loaded flag is still not trustworthy.

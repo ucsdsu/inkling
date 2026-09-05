@@ -13,8 +13,11 @@ import dev.inkling.core.ShelfTags
 import dev.inkling.core.Tag
 import dev.inkling.data.Repo
 import dev.inkling.data.TutorAttempt
+import dev.inkling.speech.CallbackSession
 import dev.inkling.speech.Recognizer
 import dev.inkling.speech.Speaker
+import dev.inkling.speech.RecognitionInput
+import dev.inkling.speech.SpeechSpeaker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -78,21 +81,6 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
  * has tapped "Listening…" off, and coaching him on a read he abandoned is the same as telling him
  * he got it wrong. The cancel is spent on the first thing that arrives.
  */
-class ListenSession {
-    private var cancelled = false
-
-    fun start() { cancelled = false }
-
-    fun cancel() { cancelled = true }
-
-    /** True when what just arrived should be used. Clears the cancel it consumes. */
-    fun accept(): Boolean {
-        if (!cancelled) return true
-        cancelled = false
-        return false
-    }
-}
-
 /**
  * The two transcripts the debug long-press feeds the tutor, built from the line on the page so
  * the coach names a word the child can actually see.
@@ -139,7 +127,8 @@ fun stageLabel(stage: String): String = when {
  * handed "cat" as his try-it book, but reading his way past the floor still moves him up.
  */
 fun currentStageIndex(books: List<Book>, histories: Map<String, BookHistory>, startStage: Int = 0): Int {
-    val i = books.indexOfFirst { (histories[it.id]?.lastAccuracy ?: 0f) < ShelfTags.EASY_FLOOR }
+    val i = books.indices.firstOrNull { it >= startStage &&
+        (histories[books[it].id]?.lastAccuracy ?: 0f) < ShelfTags.EASY_FLOOR } ?: -1
     val fromHistory = if (i < 0) books.lastIndex.coerceAtLeast(0) else i
     return maxOf(fromHistory, startStage).coerceAtMost(books.lastIndex.coerceAtLeast(0))
 }
@@ -157,16 +146,21 @@ fun buildShelf(books: List<Book>, histories: Map<String, BookHistory>, startStag
  *
  * @param context application context; the TTS engine and the recognizer outlive any one screen
  */
-class ReaderViewModel(private val repo: Repo, private val store: BookStore, context: Context) : ViewModel() {
+class ReaderViewModel(
+    private val repo: Repo,
+    private val store: BookStore,
+    context: Context,
+    private val speaker: SpeechSpeaker = Speaker(context),
+    private val recognizer: RecognitionInput = Recognizer(context),
+) : ViewModel() {
     private val _state = MutableStateFlow(ReaderState())
     val state: StateFlow<ReaderState> = _state
 
     private val _shelf = MutableStateFlow<List<ShelfRow>>(emptyList())
     val shelf: StateFlow<List<ShelfRow>> = _shelf
 
-    private val speaker = Speaker(context) { }
-    private val recognizer = Recognizer(context)
-    private val session = ListenSession()
+    private val session = CallbackSession()
+    private val playback = CallbackSession()
 
     private var childId: Long = 0
     private var pageStartedAt: Long = 0
@@ -194,6 +188,8 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
             _state.value = ReaderState(noChild = true)
             return@launch
         }
+        cancelListening()
+        stopSpeaking()
         childId = child.id
         _state.value = ReaderState(book = store.byId(bookId), page = 0)
         startPage()
@@ -204,8 +200,9 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         val book = _state.value.book ?: return
         val next = (_state.value.page + delta).coerceIn(0, book.pages.lastIndex)
         if (next == _state.value.page) return
+        cancelListening()
         logPage()
-        speaker.stop()
+        stopSpeaking()
         _state.value = _state.value.copy(page = next, phase = TutorPhase.IDLE, speakingWord = -1, missedWord = null, chunks = emptyList())
         startPage()
     }
@@ -220,9 +217,8 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
      */
     fun leave() {
         if (_state.value.book == null) return
-        recognizer.cancel()
-        session.cancel()
-        speaker.stop()
+        cancelListening()
+        stopSpeaking()
         logPage()
         _state.value = ReaderState()
     }
@@ -230,12 +226,33 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     fun speakLine() {
         val s = _state.value
         val book = s.book ?: return
-        usedTts = true
-        speaker.speakLine(
+        cancelListening()
+        stopSpeaking()
+        if (s.phase == TutorPhase.LISTENING) _state.value = s.copy(phase = TutorPhase.IDLE)
+        val targetPage = s.page
+        val token = playback.start()
+        val queued = speaker.speakLine(
             line = book.pages[s.page],
-            onWord = { i -> _state.value = _state.value.copy(speakingWord = i) },
-            onDone = { _state.value = _state.value.copy(speakingWord = -1) },
+            onWord = { i ->
+                if (playback.isCurrent(token) && _state.value.book?.id == book.id && _state.value.page == targetPage) {
+                    _state.value = _state.value.copy(speakingWord = i)
+                }
+            },
+            onDone = {
+                if (playback.accept(token) && _state.value.book?.id == book.id && _state.value.page == targetPage) {
+                    usedTts = true
+                    _state.value = _state.value.copy(speakingWord = -1)
+                }
+            },
+            onUnavailable = { message ->
+                if (playback.accept(token) && _state.value.book?.id == book.id && _state.value.page == targetPage) {
+                    _state.value = _state.value.copy(
+                        phase = TutorPhase.UNCLEAR, speakingWord = -1, notice = message,
+                    )
+                }
+            },
         )
+        if (!queued) playback.cancel()
     }
 
     fun listen() {
@@ -244,14 +261,23 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         _state.value = _state.value.copy(
             phase = TutorPhase.LISTENING, speakingWord = -1, missedWord = null, chunks = emptyList(), notice = null,
         )
-        speaker.stop()
-        session.start()
+        stopSpeaking()
+        recognizer.cancel()
+        val token = session.start()
+        val targetBook = _state.value.book?.id
+        val targetPage = _state.value.page
+        val targetChild = childId
         recognizer.listen(
-            onResult = { transcript, confidence -> handleRecognition(transcript, confidence) },
+            onResult = { transcript, confidence ->
+                if (speechTargetMatches(targetChild, targetBook, targetPage)) {
+                    handleRecognition(token, transcript, confidence)
+                }
+            },
             // An engine error is the same to the child as silence: nothing gets named or flagged.
             onError = {
-                if (session.accept()) {
-                    _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, speechMode = recognizer.lastMode)
+                if (speechTargetMatches(targetChild, targetBook, targetPage) && session.accept(token)) {
+                    _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, speechMode = recognizer.lastMode,
+                        notice = it.takeIf { message -> message == Recognizer.OFFLINE_UNAVAILABLE })
                 }
             },
         )
@@ -264,8 +290,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
 
     /** He tapped the mic off. Nothing he half-said gets coached or logged. */
     fun stopListening() {
-        recognizer.cancel()
-        session.cancel()
+        cancelListening()
         if (_state.value.phase == TutorPhase.LISTENING) _state.value = _state.value.copy(phase = TutorPhase.IDLE)
     }
 
@@ -273,7 +298,16 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     fun replayChunks() {
         val s = _state.value
         val word = s.missedWord ?: return
-        speaker.speakChunks(s.chunks.map { it.text }, word) { }
+        stopSpeaking()
+        val token = playback.start()
+        speaker.speakChunks(
+            s.chunks.map { it.text }, word, onDone = { playback.accept(token) },
+            onUnavailable = { message ->
+                if (playback.accept(token) && _state.value.book?.id == s.book?.id && _state.value.page == s.page) {
+                    _state.value = _state.value.copy(phase = TutorPhase.UNCLEAR, notice = message)
+                }
+            },
+        )
     }
 
     /**
@@ -285,13 +319,13 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         val s = _state.value
         val book = s.book ?: return
         val fakes = fakeTranscripts(book.pages[s.page])
-        session.start()
-        handleRecognition(fakes[fakeIndex % fakes.size], 1f)
+        val token = session.start()
+        handleRecognition(token, fakes[fakeIndex % fakes.size], 1f)
         fakeIndex++
     }
 
-    private fun handleRecognition(transcript: String, confidence: Float) {
-        if (!session.accept()) return
+    private fun handleRecognition(token: Long, transcript: String, confidence: Float) {
+        if (!session.accept(token)) return
         val before = _state.value
         val book = before.book ?: return
         _state.value = onRecognized(before, transcript, confidence).copy(speechMode = recognizer.lastMode)
@@ -317,6 +351,19 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
         usedSelf = false
     }
 
+    private fun cancelListening() {
+        recognizer.cancel()
+        session.cancel()
+    }
+
+    private fun stopSpeaking() {
+        playback.cancel()
+        speaker.stop()
+    }
+
+    private fun speechTargetMatches(targetChild: Long, targetBook: String?, targetPage: Int): Boolean =
+        childId == targetChild && _state.value.book?.id == targetBook && _state.value.page == targetPage
+
     private fun logPage() {
         val s = _state.value
         val book = s.book ?: return
@@ -328,6 +375,7 @@ class ReaderViewModel(private val repo: Repo, private val store: BookStore, cont
     }
 
     override fun onCleared() {
+        playback.cancel()
         speaker.shutdown()
         recognizer.destroy()
     }

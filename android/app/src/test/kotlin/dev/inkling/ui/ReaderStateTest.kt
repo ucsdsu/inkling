@@ -59,28 +59,6 @@ class ReaderStateTest {
         assertEquals(TutorPhase.GOOD, onRecognized(red, "the hen is wed", 1f).phase)
     }
 
-    @Test fun cancellingTheMicDropsTheResultThatArrivesAnyway() {
-        val session = ListenSession()
-        var phase = TutorPhase.IDLE
-        var logged = 0
-        // The same order the view model calls these in.
-        fun onResult() {
-            if (!session.accept()) return
-            phase = TutorPhase.GOOD
-            logged++
-        }
-        session.start()
-        session.cancel()
-        onResult()
-        assertEquals(TutorPhase.IDLE, phase)
-        assertEquals(0, logged)
-        // The cancel is spent: the next turn at the mic counts.
-        session.start()
-        onResult()
-        assertEquals(TutorPhase.GOOD, phase)
-        assertEquals(1, logged)
-    }
-
     @Test fun debugFakesComeFromTheLineOnThePage() {
         val fakes = fakeTranscripts("The hen is in the pen.")
         assertEquals(listOf("The hen is in the pen.", "The hen is in the ben."), fakes)
@@ -121,6 +99,12 @@ class ReaderStateTest {
         val h = mapOf("a" to BookHistory("a", 1, 0.96f))
         assertEquals(1, currentStageIndex(books, h))
         assertEquals(listOf(Tag.EASY, Tag.TRY_IT, Tag.STRETCH), buildShelf(books, h).map { it.tag })
+    }
+
+    @Test fun masteringPlacementStageAdvancesWithoutEarlierBooks() {
+        val books = listOf(hen.copy(id = "a"), hen.copy(id = "b"), hen.copy(id = "c"), hen.copy(id = "d"))
+        val history = mapOf("c" to BookHistory("c", 1, 1f))
+        assertEquals(3, currentStageIndex(books, history, startStage = 2))
     }
 
     @Test fun startStageRaisesCurrentStage() {

@@ -39,7 +39,9 @@ class Repo(private val db: InklingDb) {
                 interests = interests, startStage = startStage,
             ),
         )
-        db.settings().upsert(Settings(childId = id))
+        val parent = db.settings().parentSecurity()
+        db.settings().upsert(Settings(childId = id, pinHash = parent?.pinHash,
+            pinFailures = parent?.pinFailures ?: 0, lockoutUntil = parent?.lockoutUntil ?: 0))
         db.deviceState().upsert(DeviceState(activeChildId = id))
         db.children().byId(id)!!
     }
@@ -48,8 +50,19 @@ class Repo(private val db: InklingDb) {
 
     suspend fun setStartStage(childId: Long, stage: Int) = db.children().setStartStage(childId, stage)
 
-    suspend fun settings(childId: Long): Settings = db.settings().get(childId) ?: Settings(childId).also { db.settings().upsert(it) }
-    suspend fun saveSettings(s: Settings) = db.settings().upsert(s)
+    suspend fun settings(childId: Long): Settings = db.withTransaction {
+        val own = db.settings().get(childId) ?: Settings(childId).also { db.settings().upsert(it) }
+        // Existing version-3 profiles may predate shared PINs. Keep the oldest established PIN
+        // before showing the unlock screen, including when the active profile has no PIN.
+        val parent = db.settings().parentSecurity() ?: return@withTransaction own
+        db.settings().shareParentSecurity(parent.pinHash, parent.pinFailures, parent.lockoutUntil)
+        own.copy(pinHash = parent.pinHash, pinFailures = parent.pinFailures, lockoutUntil = parent.lockoutUntil)
+    }
+    suspend fun saveSettings(s: Settings) = db.withTransaction {
+        db.settings().upsert(s)
+        // Parent access belongs to the device; reading and app limits belong to each child.
+        db.settings().shareParentSecurity(s.pinHash, s.pinFailures, s.lockoutUntil)
+    }
 
     suspend fun rules(childId: Long): List<AppRule> = db.rules().list(childId)
     suspend fun upsertRule(r: AppRule) {
@@ -70,7 +83,7 @@ class Repo(private val db: InklingDb) {
      */
     suspend fun openSpanIfChanged(childId: Long, pkg: String, now: Long) = db.withTransaction {
         val open = db.usage().open()
-        if (open.isNotEmpty() && open.all { it.packageName == pkg }) return@withTransaction
+        if (open.isNotEmpty() && open.all { it.packageName == pkg && it.childId == childId }) return@withTransaction
         closeOpenSpanInternal(now)
         db.usage().insert(UsageEvent(childId = childId, packageName = pkg, startedAt = now, endedAt = null))
         Unit

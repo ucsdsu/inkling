@@ -6,11 +6,14 @@ import androidx.lifecycle.viewModelScope
 import dev.inkling.core.Placement
 import dev.inkling.core.WordOutcome
 import dev.inkling.data.Repo
+import dev.inkling.speech.CallbackSession
 import dev.inkling.speech.Recognizer
-import dev.inkling.ui.ListenSession
+import dev.inkling.speech.RecognitionInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The three onboarding screens as one piece of state: who the child is, how the placement read
@@ -31,6 +34,7 @@ data class OnboardingState(
     val lastOutcome: WordOutcome? = null,
     val stage: Int? = null,
     val createdChildId: Long? = null,
+    val notice: String? = null,
 )
 
 /** The chips on the profile screen. Order is the order they are shown and stored in. */
@@ -95,12 +99,16 @@ fun recapLine(outcomes: List<WordOutcome>): String {
  *
  * @param context application context; the recognizer outlives any one screen
  */
-class OnboardingViewModel(private val repo: Repo, context: Context) : ViewModel() {
+class OnboardingViewModel(
+    private val repo: Repo,
+    context: Context,
+    private val recognizer: RecognitionInput = Recognizer(context),
+) : ViewModel() {
     private val _state = MutableStateFlow(OnboardingState())
     val state: StateFlow<OnboardingState> = _state
 
-    private val recognizer = Recognizer(context)
-    private val session = ListenSession()
+    private val session = CallbackSession()
+    private val finishMutex = Mutex()
 
     /** False means nobody has been onboarded, which is what sends Nav to the profile screen. */
     suspend fun hasChild(): Boolean = repo.activeChild() != null
@@ -126,16 +134,26 @@ class OnboardingViewModel(private val repo: Repo, context: Context) : ViewModel(
     fun listen() {
         val s = _state.value
         val word = Placement.WORDS.getOrNull(s.wordIndex)?.word ?: return
-        if (s.listening) return
+        if (s.listening || s.notice != null) return
         _state.value = s.copy(listening = true, lastOutcome = null)
-        session.start()
+        recognizer.cancel()
+        val token = session.start()
+        val wordIndex = s.wordIndex
         recognizer.listen(
             onResult = { transcript, confidence ->
                 // A negative score means the engine rated nothing, not that it heard nothing.
-                if (session.accept()) result(Placement.outcome(word, transcript, if (confidence < 0) 1f else confidence))
+                if (_state.value.wordIndex == wordIndex && session.accept(token)) {
+                    result(Placement.outcome(word, transcript, if (confidence < 0) 1f else confidence))
+                }
             },
             // An engine error sounds the same to a four-year-old as silence: it buys him the retry.
-            onError = { if (session.accept()) result(WordOutcome.UNCLEAR) },
+            onError = { message ->
+                if (_state.value.wordIndex == wordIndex && session.accept(token)) {
+                    if (message == Recognizer.OFFLINE_UNAVAILABLE) {
+                        _state.value = _state.value.copy(listening = false, notice = message)
+                    } else result(WordOutcome.UNCLEAR)
+                }
+            },
         )
     }
 
@@ -161,17 +179,18 @@ class OnboardingViewModel(private val repo: Repo, context: Context) : ViewModel(
      * exists, so the shelf it navigates to already has somebody to load.
      */
     fun finish(onDone: () -> Unit) = viewModelScope.launch {
-        val s = _state.value
-        if (s.createdChildId == null) {
+        finishMutex.withLock {
+            val s = _state.value
+            if (s.createdChildId != null || !canContinue(s) || s.stage == null) return@withLock
             val child = repo.addChild(
                 name = s.name.trim(),
                 ageYears = s.age,
                 interests = INTERESTS.filter { it in s.interests }.joinToString(","),
-                startStage = s.stage ?: 0,
+                startStage = s.stage,
             )
             _state.value = _state.value.copy(createdChildId = child.id)
+            onDone()
         }
-        onDone()
     }
 
     override fun onCleared() {
