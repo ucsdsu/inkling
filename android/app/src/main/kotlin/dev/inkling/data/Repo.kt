@@ -23,6 +23,16 @@ class Repo(private val db: InklingDb) {
         return db.children().byId(id)
     }
 
+    suspend fun discovery(childId: Long, lessonId: String): DiscoveryProgress? =
+        db.discoveries().get(childId, lessonId)
+
+    suspend fun finishDiscovery(childId: Long, lessonId: String, day: Long, recall: Boolean) = db.withTransaction {
+        // A stale screen must not create orphan progress for a removed child.
+        if (db.children().byId(childId) == null) return@withTransaction
+        db.discoveries().begin(DiscoveryProgress(childId, lessonId, day))
+        if (recall) db.discoveries().recall(childId, lessonId, day)
+    }
+
     /** Every child on the device, oldest first. */
     suspend fun children(): List<Child> = db.children().all()
 

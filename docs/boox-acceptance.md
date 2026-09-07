@@ -19,7 +19,7 @@ Target: Onyx BOOX Go Color 7 Gen II. No factory reset or Device Owner setup.
 2. Set the parent PIN.
 3. Choose Inkling as the Home app.
 4. Enable the Inkling accessibility service.
-5. Enable the intended child apps in the parent Apps tab.
+5. Enable the intended child apps in the parent Manage apps tab.
 6. Turn Kids mode on.
 7. Open each allowed app from its tile. Press Home. Confirm that kid home appears.
 8. Try an app that is not allowed. Confirm that Inkling returns within 1 second.
@@ -76,3 +76,36 @@ and its boundaries together. Missing recognition is an unavailable test, not a p
 Do not clear app data or uninstall to recover the launcher. Those actions remove
 local reading records. If the parent route fails, use Android Settings to change
 the Home app and disable the service.
+
+## Reader interaction regression (2026-09-06 audit)
+
+Use a backed-up test profile. These actions create reading records.
+
+1. Open a book without starting speech.
+2. Tap words near both edges of the page. Confirm that the page number does not change.
+3. Tap Next. Confirm that the page advances once.
+4. Tap Back. Confirm that the previous page returns.
+5. Return to page 1. Confirm that Back is disabled.
+6. Reach the last page. Confirm that Next becomes Finish.
+7. Tap Finish. Confirm that the shelf opens and the parent reading record updates.
+8. Trigger a correction. On a debug emulator, long-press I'll read twice to simulate success then a missed word.
+9. Inspect portrait, landscape, and narrow rendering. Confirm that the full line, all chunks, and both navigation controls are visible.
+10. Repeat with real speech on BOOX. Confirm that Stop listening cancels the microphone and page changes stop old speech.
+
+Judge layout separately from recognition quality. Simulated transcripts cannot pass the speech gate.
+
+## Installed-app visibility and approval regression
+
+1. Use a simulator or backed-up test device with an installed launchable app.
+2. Unlock Parent. Confirm that Manage apps opens first and lists the app with its icon.
+3. Switch the app on. Lock Parent. Confirm that its tile appears below Read.
+4. Open the tile. Press Home. Confirm that Inkling returns.
+5. Remove approval. Confirm that the tile disappears and a direct launch returns to Inkling
+   while Kids mode and its accessibility service are enabled.
+6. Turn Kids mode off. Open the normal home. Return to Parent and confirm the list refreshes.
+7. Repeat the picker layout check at 720x1440 and 1680x1264, including the setup notices.
+8. Reverse the temporary approvals. Compare unrelated reading, profile, and PIN records.
+
+The manifest must declare MAIN + LAUNCHER package visibility for the picker and
+MAIN + HOME visibility for the stock-home return. Without these queries Android can
+silently return only a small subset of installed apps. No QUERY_ALL_PACKAGES is needed.

@@ -96,3 +96,14 @@ data class TutorAttempt(
     val lowConfidence: Boolean,
     val at: Long,
 )
+
+/** Exposure only, not mastery. Days are civil dates in the device's local time zone. */
+@Entity(primaryKeys = ["childId", "lessonId"])
+data class DiscoveryProgress(
+    val childId: Long,
+    val lessonId: String,
+    val firstCompletedDay: Long,
+    val lastRecallDay: Long? = null,
+) {
+    fun recallDue(today: Long): Boolean = today > maxOf(firstCompletedDay, lastRecallDay ?: firstCompletedDay)
+}

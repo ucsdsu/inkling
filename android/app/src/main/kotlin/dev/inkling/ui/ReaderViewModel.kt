@@ -75,13 +75,6 @@ fun onRecognized(state: ReaderState, transcript: String, confidence: Float): Rea
 }
 
 /**
- * One turn at the mic, and whether its result is still wanted.
- *
- * SpeechRecognizer.cancel() is not instant: a result or an error can still land after the child
- * has tapped "Listening…" off, and coaching him on a read he abandoned is the same as telling him
- * he got it wrong. The cancel is spent on the first thing that arrives.
- */
-/**
  * The two transcripts the debug long-press feeds the tutor, built from the line on the page so
  * the coach names a word the child can actually see.
  *

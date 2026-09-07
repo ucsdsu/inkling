@@ -1,6 +1,7 @@
 package dev.inkling.ui
 
 import android.content.pm.PackageManager
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.inkling.apps.InstalledApps
@@ -26,7 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.TimeZone
 
-data class AppRow(val packageName: String, val label: String, val enabled: Boolean, val cap: Int)
+data class AppRow(val packageName: String, val label: String, val enabled: Boolean, val cap: Int, val icon: ImageBitmap? = null)
 data class TodayRow(val label: String, val minutes: Int)
 
 /** One book on the parent's reading list. [accuracy] is null until he has read it aloud. */
@@ -163,12 +164,13 @@ class ParentViewModel(
             ),
         )
         val installed = withContext(Dispatchers.IO) { InstalledApps.launchable(pm, self) }
-        _state.value = _state.value.copy(
-            apps = installed.map { (pkg, label) ->
+        val apps = withContext(Dispatchers.IO) {
+            installed.map { (pkg, label) ->
                 val r = rules.firstOrNull { it.packageName == pkg }
-                AppRow(pkg, label, r?.enabled ?: false, r?.dailyCapMinutes ?: 0)
-            },
-        )
+                AppRow(pkg, label, r?.enabled ?: false, r?.dailyCapMinutes ?: 0, InstalledApps.icon(pm, pkg))
+            }
+        }
+        _state.value = _state.value.copy(apps = apps)
     }
 
     fun setKidsMode(on: Boolean) = update { it.copy(kidsModeOn = on) }

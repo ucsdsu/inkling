@@ -57,6 +57,7 @@ class Recognizer private constructor(
                 SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         },
         createEngine = {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) error(OFFLINE_UNAVAILABLE)
             AndroidRecognitionEngine(SpeechRecognizer.createOnDeviceSpeechRecognizer(context))
         },
     )

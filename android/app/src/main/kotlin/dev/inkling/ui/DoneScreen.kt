@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -38,7 +39,7 @@ fun BigButton(label: String, filled: Boolean, onClick: () -> Unit) {
         Modifier.fillMaxWidth(0.7f).padding(vertical = 5.dp)
             .background(if (filled) InklingColors.Ink else InklingColors.Paper, RoundedCornerShape(10.dp))
             .border(2.dp, InklingColors.Ink, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick).padding(vertical = 12.dp),
+            .heightIn(min = TapTarget).clickable(onClick = onClick).padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = if (filled) InklingColors.Paper else InklingColors.Ink) }
 }
