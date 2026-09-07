@@ -2,10 +2,9 @@ package dev.inkling.ui
 
 import android.content.pm.PackageManager
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.inkling.apps.InstalledApps
 import dev.inkling.core.BlockDecision
 import dev.inkling.core.Budget
 import dev.inkling.core.QuietHours
@@ -22,9 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.TimeZone
-
-/** Square edge the launcher icon is rasterized to before Compose scales it down to 40.dp. */
-private const val ICON_PX = 96
 
 /** `icon` is null in pure code and tests; the view model fills it in from the package manager. */
 data class Tile(
@@ -89,22 +85,8 @@ class HomeViewModel(private val repo: Repo, private val pm: PackageManager) : Vi
         val base = buildHomeState(child.name, rules, spans, settings, now, tz, minuteOfDay)
             .copy(booksToday = repo.booksFinishedToday(child.id, dayStart))
         // Icon decoding hits the package manager and rasterizes a drawable, so keep it off the main thread.
-        val icons = withContext(Dispatchers.IO) { base.tiles.associate { it.packageName to loadIcon(it.packageName) } }
+        val icons = withContext(Dispatchers.IO) { base.tiles.associate { it.packageName to InstalledApps.icon(pm, it.packageName) } }
         _state.value = base.copy(tiles = base.tiles.map { it.copy(icon = icons[it.packageName]) })
     }
 
-    /**
-     * The app's launcher icon as a bitmap.
-     *
-     * @param packageName package to look up
-     * @return the icon, or null when the app is no longer installed or its icon will not rasterize
-     */
-    private fun loadIcon(packageName: String): ImageBitmap? = try {
-        pm.getApplicationIcon(packageName).toBitmap(ICON_PX, ICON_PX).asImageBitmap()
-    } catch (e: PackageManager.NameNotFoundException) {
-        null
-    } catch (e: IllegalArgumentException) {
-        // toBitmap throws this for a drawable with no intrinsic size it can honor.
-        null
-    }
 }

@@ -88,3 +88,15 @@ interface TutorAttemptDao {
     @Query("SELECT * FROM TutorAttempt WHERE childId = :childId ORDER BY at DESC")
     suspend fun all(childId: Long): List<TutorAttempt>
 }
+
+@Dao
+interface DiscoveryDao {
+    @Query("SELECT * FROM DiscoveryProgress WHERE childId = :childId AND lessonId = :lessonId")
+    suspend fun get(childId: Long, lessonId: String): DiscoveryProgress?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun begin(progress: DiscoveryProgress)
+
+    @Query("UPDATE DiscoveryProgress SET lastRecallDay = :day WHERE childId = :childId AND lessonId = :lessonId AND :day > firstCompletedDay AND (lastRecallDay IS NULL OR :day > lastRecallDay)")
+    suspend fun recall(childId: Long, lessonId: String, day: Long)
+}

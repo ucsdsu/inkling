@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -28,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,7 +49,7 @@ fun KidHome(state: HomeState, onOpen: (Tile) -> Unit, onRead: () -> Unit, onGear
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.size(1.dp))
             Box(
-                Modifier.size(28.dp).border(1.5.dp, InklingColors.Ink3, CircleShape)
+                Modifier.size(TapTarget).semantics { contentDescription = "Parent settings. Touch and hold." }.border(1.5.dp, InklingColors.Ink3, CircleShape)
                     .combinedClickable(onClick = {}, onLongClick = onGearLongPress),
                 contentAlignment = Alignment.Center,
             ) { Text("⚙", fontSize = 13.sp, color = InklingColors.Ink2) }
@@ -54,18 +58,18 @@ fun KidHome(state: HomeState, onOpen: (Tile) -> Unit, onRead: () -> Unit, onGear
         Text("Hi, ${state.childName}.", fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 32.sp, color = InklingColors.Ink)
         Text(booksTodayLine(state.booksToday), fontFamily = Andika, fontSize = 16.sp, color = InklingColors.Ink2)
         Spacer(Modifier.height(18.dp))
-        LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item(span = { GridItemSpan(2) }) {
                 TileCard(label = "Read", fraction = null, done = false, icon = null, glyph = painterResource(R.drawable.ic_read), onClick = onRead)
             }
             items(state.tiles, key = { it.packageName }) { t ->
                 TileCard(label = t.label, fraction = t.fraction, done = t.done, icon = t.icon, glyph = null, onClick = { onOpen(t) })
             }
+
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TileCard(
     label: String,
@@ -78,11 +82,9 @@ private fun TileCard(
     val ink = if (done) InklingColors.Ink3 else InklingColors.Ink
     val iconAlpha = if (done) DoneIconAlpha else 1f
     Column(
-        // The icon row added 46.dp of content, so every tile needs the taller box or
-        // "Done for today" gets clipped off the bottom.
-        Modifier.fillMaxWidth().height(132.dp)
+        Modifier.fillMaxWidth().heightIn(min = 132.dp)
             .border(2.dp, ink, RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick)
+            .clickable(onClick = onClick)
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {

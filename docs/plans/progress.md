@@ -395,3 +395,23 @@ recognition, audible offline TTS, and Cove's 20-correct-read spike. Vosk remains
 device evidence shows the built-in on-device recognizer cannot meet Gate 0. Warning/quiet-hour
 editing, week summary, and vendor e-ink refresh hooks remain unimplemented plan discrepancies; the
 current contract excludes them pending observed need.
+
+## Latest changes finalized (2026-09-07)
+
+Reader controls now expose Back, Next, and Finish without making page text a navigation
+target. Parent opens to Manage apps with icons and approval switches. Android package
+visibility includes launchable apps and alternate Home apps. Discover remains deferred;
+database version 4 and the additive version 3-to-4 migration preserve existing data.
+
+Finalization checks: 185 tests, 0 failures/errors/skips; debug APK builds; Android lint
+has 0 errors and 38 existing warnings; `git diff --check` passes. The September 6 emulator
+journeys and state-restoration evidence are recorded in WORK.md and docs/boox-ui-audit.md;
+they were not repeated during this finalization. No device state was changed today.
+
+Independent Astra review of the complete diff and the SQL migration precision pass found
+no remaining must-fix issues. The populated migration regression checks old rows and
+sequence counters, then reopens version 4. Hardware and child testing remain open.
+
+APK SHA-256: `5b5f6499043e8cbbaf3c0a96a9ca1fbe06848e6bde992ede8a482dac1b91407a`.
+Shared-core preflight could not fast-forward because jon-core has diverged; local rules
+were read and that separate repository was left untouched.

@@ -19,6 +19,8 @@ Phase 1c is implemented and emulator-tested. Real Boox and child-speech verifica
 Use [the Boox acceptance checklist](docs/boox-acceptance.md) for the device trial
 and the steps to return to the stock launcher.
 
+Discover is deferred to a follow-on version. This version focuses on reading and parent-approved apps.
+
 ## Design
 
 - Click-through prototype: [docs/prototype/inkling-sim.html](docs/prototype/inkling-sim.html)
@@ -43,7 +45,7 @@ Requirements: JDK 17, Android SDK with platform 34 and build-tools 34.
 
 3. Install on a device over USB.
 
-   Existing database version 3 profiles are retained. Earlier pre-release database versions
+   Database versions 3 and 4 retain existing profiles. Version 3 upgrades add only discovery progress. Earlier pre-release database versions
    use destructive migration; back up their app data before upgrading.
 
    ```bash
@@ -56,7 +58,9 @@ Requirements: JDK 17, Android SDK with platform 34 and build-tools 34.
 2. Open Settings > Apps > Default apps > Home app. Choose Inkling.
 3. Open Settings > Accessibility. Enable the Inkling service.
 4. Open Inkling. Long-press the gear. Set a PIN.
-5. In the Apps tab, switch on the apps the child may use.
+5. In Manage apps, switch on the apps the child may use. Approved apps appear below Read.
+   To add another app, turn Kids mode off, open the normal device home, and install it.
+   Return to Manage apps to approve it. New apps stay off until approved.
 6. Switch Kids mode on.
 
 The parent PIN and lockout apply to every child. Reading records and app limits remain

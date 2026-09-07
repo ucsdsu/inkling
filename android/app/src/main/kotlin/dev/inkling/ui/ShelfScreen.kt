@@ -77,10 +77,10 @@ private fun coverLetter(title: String): String =
 @Composable
 private fun BookRow(row: ShelfRow, cover: Color, onOpen: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(80.dp)
+        Modifier.fillMaxWidth().heightIn(min = 80.dp)
             .border(1.5.dp, InklingColors.Ink2, RoundedCornerShape(8.dp))
             .clickable { onOpen(row.book.id) }
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(width = 46.dp, height = 60.dp).background(cover, RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {

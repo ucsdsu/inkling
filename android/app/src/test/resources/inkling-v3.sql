@@ -1,0 +1,17 @@
+CREATE TABLE `AppRule` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `childId` INTEGER NOT NULL, `packageName` TEXT NOT NULL, `label` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `dailyCapMinutes` INTEGER NOT NULL);
+CREATE TABLE `Child` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `ageYears` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `interests` TEXT NOT NULL, `startStage` INTEGER NOT NULL);
+CREATE TABLE `DeviceState` (`id` INTEGER NOT NULL, `activeChildId` INTEGER, PRIMARY KEY(`id`));
+CREATE TABLE `ReadEvent` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `childId` INTEGER NOT NULL, `bookId` TEXT NOT NULL, `page` INTEGER NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `mode` TEXT NOT NULL);
+CREATE TABLE `Settings` (`childId` INTEGER NOT NULL, `kidsModeOn` INTEGER NOT NULL, `deviceCeilingMinutes` INTEGER NOT NULL, `warningMinutes` INTEGER NOT NULL, `quietStartMinute` INTEGER NOT NULL, `quietEndMinute` INTEGER NOT NULL, `pinHash` TEXT, `pinFailures` INTEGER NOT NULL, `lockoutUntil` INTEGER NOT NULL, PRIMARY KEY(`childId`));
+CREATE TABLE `SpikeRow` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `expected` TEXT NOT NULL, `transcript` TEXT NOT NULL, `confidence` REAL NOT NULL, `flagged` TEXT NOT NULL, `verdict` TEXT NOT NULL, `at` INTEGER NOT NULL);
+CREATE TABLE `TutorAttempt` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `childId` INTEGER NOT NULL, `bookId` TEXT NOT NULL, `page` INTEGER NOT NULL, `transcript` TEXT NOT NULL, `confidence` REAL NOT NULL, `missed` TEXT NOT NULL, `totalWords` INTEGER NOT NULL, `lowConfidence` INTEGER NOT NULL, `at` INTEGER NOT NULL);
+CREATE TABLE `UsageEvent` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `childId` INTEGER NOT NULL, `packageName` TEXT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER);
+CREATE UNIQUE INDEX `index_AppRule_childId_packageName` ON `AppRule` (`childId`, `packageName`);
+CREATE INDEX `index_ReadEvent_bookId` ON `ReadEvent` (`bookId`);
+CREATE INDEX `index_ReadEvent_childId` ON `ReadEvent` (`childId`);
+CREATE INDEX `index_ReadEvent_startedAt` ON `ReadEvent` (`startedAt`);
+CREATE INDEX `index_TutorAttempt_at` ON `TutorAttempt` (`at`);
+CREATE INDEX `index_TutorAttempt_bookId` ON `TutorAttempt` (`bookId`);
+CREATE INDEX `index_TutorAttempt_childId` ON `TutorAttempt` (`childId`);
+CREATE INDEX `index_UsageEvent_childId` ON `UsageEvent` (`childId`);
+CREATE INDEX `index_UsageEvent_startedAt` ON `UsageEvent` (`startedAt`);

@@ -1,5 +1,8 @@
 package dev.inkling.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -49,11 +55,11 @@ fun ParentScreen(
     onAddChild: () -> Unit,
     onSwitchChild: (Long) -> Unit,
 ) {
-    var tab by remember { mutableStateOf("Today") }
+    var tab by remember { mutableStateOf("Manage apps") }
     val s = state.settings ?: return
-    Column(Modifier.fillMaxSize().background(InklingColors.Paper).padding(20.dp)) {
+    Column(Modifier.fillMaxSize().background(InklingColors.Paper).padding(24.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("‹ Lock", color = InklingColors.Ink2, modifier = Modifier.clickable(onClick = onLock))
+            Text("‹ Lock", color = InklingColors.Ink2, modifier = Modifier.heightIn(min = 60.dp).clickable(onClick = onLock).padding(vertical = 16.dp))
             Text("Parent", color = InklingColors.Ink2)
             Spacer(Modifier.width(1.dp))
         }
@@ -68,7 +74,7 @@ fun ParentScreen(
             Modifier.fillMaxWidth().border(2.dp, InklingColors.Ink, RoundedCornerShape(10.dp)).padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(Modifier.weight(1f).padding(end = 16.dp)) {
                 Text("Kids mode", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Text(if (s.kidsModeOn) "On. Only the apps switched on below can open." else "Off. Device returns to the normal Boox home screen for you.", fontSize = 12.sp, color = InklingColors.Ink2)
             }
@@ -79,12 +85,12 @@ fun ParentScreen(
             BigButton("Open Boox home", filled = false, onClick = onOpenBooxHome)
         }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Today", "Reading", "Next up", "Apps", "Rules").forEach { t ->
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Manage apps", "Today", "Reading", "Next up", "Rules").forEach { t ->
                 Box(
                     Modifier.border(1.5.dp, if (tab == t) InklingColors.Ink else InklingColors.Ink3, RoundedCornerShape(14.dp))
                         .background(if (tab == t) InklingColors.Paper2 else InklingColors.Paper, RoundedCornerShape(14.dp))
-                        .clickable { tab = t }.padding(horizontal = 10.dp, vertical = 5.dp),
+                        .heightIn(min = 48.dp).clickable { tab = t }.padding(horizontal = 12.dp, vertical = 12.dp),
                 ) { Text(t, fontSize = 12.sp, color = if (tab == t) InklingColors.Ink else InklingColors.Ink2) }
             }
         }
@@ -93,7 +99,7 @@ fun ParentScreen(
             "Today" -> TodayTab(state)
             "Reading" -> ReadingTab(state.reading)
             "Next up" -> NextUpTab(state.nextUp)
-            "Apps" -> AppsTab(state, onApp)
+            "Manage apps" -> AppsTab(state, onApp)
             "Rules" -> RulesTab(s.deviceCeilingMinutes, state.children, state.activeChildId, onCeiling, onChangePin, onSpeechTest, onExportSpike, onAddChild, onSwitchChild)
         }
     }
@@ -159,16 +165,38 @@ private fun NextUpTab(recs: List<Recommendation>) {
 
 @Composable
 private fun AppsTab(state: ParentState, onApp: (AppRow, Boolean, Int) -> Unit) {
-    LazyColumn {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Text("Choose apps", fontFamily = Andika, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Switch on an installed app to put it on your child's home screen.", fontSize = 16.sp)
+        }
+        if (state.apps.isEmpty()) item {
+            Text("No apps found yet. Install an app from the normal device home, then return here.", fontSize = 16.sp)
+        }
         items(state.apps, key = { it.packageName }) { a ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(a.label, Modifier.weight(1f), fontSize = 13.sp, color = if (a.enabled) InklingColors.Ink else InklingColors.Ink3)
-                Stepper(value = a.cap, enabled = a.enabled, onChange = { onApp(a, a.enabled, it) })
-                Spacer(Modifier.width(10.dp))
-                Switch(checked = a.enabled, onCheckedChange = { onApp(a, it, a.cap) })
+            Column(Modifier.fillMaxWidth().border(1.5.dp, InklingColors.Ink, RoundedCornerShape(24.dp)).padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    a.icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(48.dp)) }
+                    Column(Modifier.weight(1f)) {
+                        Text(a.label, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (a.enabled) "On home screen" else "Not on home screen", fontSize = 14.sp)
+                    }
+                    Switch(checked = a.enabled,
+                        modifier = Modifier.semantics { contentDescription = "Allow ${a.label} on home screen" },
+                        onCheckedChange = { onApp(a, it, a.cap) })
+                }
+                if (a.enabled) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (a.cap == 0) "No daily app limit" else "${a.cap} min per day", Modifier.weight(1f), fontSize = 16.sp)
+                        Stepper(value = a.cap, enabled = true, onChange = { onApp(a, true, it) })
+                    }
+                }
             }
         }
-        item { Text("Switch on = tile on the home screen. Minutes = daily cap, 0 = no cap.", fontSize = 11.sp, color = InklingColors.Ink3, modifier = Modifier.padding(top = 6.dp)) }
+        item {
+            Text("Need another app? Turn Kids mode off, open the normal device home, and install it. Return here to approve it. New apps stay off until you choose them.", fontSize = 16.sp)
+        }
     }
 }
 
@@ -239,8 +267,8 @@ private fun KeyValue(k: String, v: String) {
 private fun Stepper(value: Int, enabled: Boolean, onChange: (Int) -> Unit) {
     val ink = if (enabled) InklingColors.Ink else InklingColors.Ink3
     Row(Modifier.border(1.5.dp, ink, RoundedCornerShape(6.dp)), verticalAlignment = Alignment.CenterVertically) {
-        Text("−", Modifier.clickable(enabled) { onChange(value - 5) }.background(InklingColors.Paper2).padding(horizontal = 10.dp, vertical = 3.dp), color = ink)
+        Text("−", Modifier.semantics { contentDescription = "Decrease daily minutes" }.clickable(enabled && value > 0) { onChange(value - 5) }.background(InklingColors.Paper2).padding(horizontal = 16.dp, vertical = 14.dp), color = ink)
         Text("$value", Modifier.width(44.dp).padding(vertical = 3.dp), fontSize = 12.sp, color = ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Text("+", Modifier.clickable(enabled) { onChange(value + 5) }.background(InklingColors.Paper2).padding(horizontal = 10.dp, vertical = 3.dp), color = ink)
+        Text("+", Modifier.semantics { contentDescription = "Increase daily minutes" }.clickable(enabled && value < 600) { onChange(value + 5) }.background(InklingColors.Paper2).padding(horizontal = 16.dp, vertical = 14.dp), color = ink)
     }
 }

@@ -105,7 +105,7 @@ fun InklingNav(
         }
         composable("parent") {
             val s by parent.state.collectAsState()
-            LaunchedEffect(Unit) { parent.setupProblems = { SetupCheck.problems(ctx) }; parent.refresh() }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { parent.setupProblems = { SetupCheck.problems(ctx) }; parent.refresh() }
             ParentScreen(
                 state = s,
                 onKidsMode = { parent.setKidsMode(it) },
@@ -172,7 +172,6 @@ fun InklingNav(
                 state = s,
                 onBack = { reader.finish(); nav.popBackStack() },
                 onTurn = { if (it > 0) forward() else reader.turn(it) },
-                onNext = forward,
                 onSpeak = { reader.speakLine() },
                 onListen = {
                     val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==

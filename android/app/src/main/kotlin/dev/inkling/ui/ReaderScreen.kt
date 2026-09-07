@@ -7,10 +7,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -49,7 +52,6 @@ fun ReaderScreen(
     state: ReaderState,
     onBack: () -> Unit,
     onTurn: (Int) -> Unit,
-    onNext: () -> Unit,
     onSpeak: () -> Unit,
     onListen: () -> Unit,
     onStopListening: () -> Unit,
@@ -62,10 +64,10 @@ fun ReaderScreen(
     Column(Modifier.fillMaxSize().background(InklingColors.Paper).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.heightIn(min = TapTarget).clickable(onClick = onBack).padding(horizontal = 2.dp),
+                Modifier.heightIn(min = TapTarget).clickable(role = Role.Button, onClick = onBack).padding(horizontal = 2.dp),
                 contentAlignment = Alignment.CenterStart,
             ) { Text("‹ Books", fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2) }
-            Text(book.title, fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2)
+            Text(book.title, fontFamily = Andika, fontSize = 15.sp, color = InklingColors.Ink2, modifier = Modifier.weight(1f).padding(start = 16.dp), textAlign = TextAlign.End)
             Spacer(Modifier.width(1.dp))
         }
         Spacer(Modifier.height(8.dp))
@@ -79,9 +81,7 @@ fun ReaderScreen(
                 textAlign = TextAlign.Start,
                 modifier = Modifier.align(Alignment.Center).padding(18.dp),
             )
-            // Invisible page turns: the left and right edges of the page, as in a paper book.
-            Box(Modifier.fillMaxHeight().fillMaxWidth(0.38f).align(Alignment.CenterStart).clickable { onTurn(-1) })
-            Box(Modifier.fillMaxHeight().fillMaxWidth(0.38f).align(Alignment.CenterEnd).clickable { onTurn(1) })
+
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -92,6 +92,7 @@ fun ReaderScreen(
                     .combinedClickable(
                         onClick = { if (listening) onStopListening() else onListen() },
                         onLongClick = onDebugFake,
+                        role = Role.Button,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -99,7 +100,7 @@ fun ReaderScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(painterResource(R.drawable.ic_mic), contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
                     Text(
-                        if (listening) "Listening…" else "I'll read",
+                        if (listening) "Stop listening" else "I'll read",
                         fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ink,
                     )
                 }
@@ -107,7 +108,7 @@ fun ReaderScreen(
             Box(
                 Modifier.weight(1f).heightIn(min = TapTarget)
                     .border(2.dp, InklingColors.Ink, RoundedCornerShape(10.dp))
-                    .clickable(onClick = onSpeak),
+                    .clickable(role = Role.Button, onClick = onSpeak),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -119,15 +120,18 @@ fun ReaderScreen(
         when (state.phase) {
             TutorPhase.COACH -> CoachCard(state, onReplayChunks)
             TutorPhase.UNCLEAR -> PlainCard(state.notice ?: "I didn't catch that. Try again.")
-            TutorPhase.GOOD -> GoodCard(onNext)
+            TutorPhase.GOOD -> PlainCard("Nice reading!")
             else -> Unit
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            "page ${state.page + 1} of ${book.pages.size}" + if (state.speechMode == "online") " · online speech" else "",
-            fontSize = 12.sp, color = InklingColors.Ink3,
-            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PageButton("‹ Back", enabled = state.page > 0, modifier = Modifier.weight(1f)) { onTurn(-1) }
+            Text(
+                "${state.page + 1} of ${book.pages.size}",
+                fontFamily = Andika, fontSize = 14.sp, color = InklingColors.Ink2,
+            )
+            PageButton(if (state.page == book.pages.lastIndex) "Finish ›" else "Next ›", modifier = Modifier.weight(1f)) { onTurn(1) }
+        }
     }
 }
 
@@ -140,13 +144,14 @@ private fun pageText(line: String, state: ReaderState) = buildAnnotatedString {
             state.missedWord != null &&
             w.filter { it.isLetter() }.lowercase() == state.missedWord.lowercase()
         when {
-            missed -> withStyle(SpanStyle(background = InklingColors.Ochre)) { append(w) }
+            missed -> withStyle(SpanStyle(background = InklingColors.Ochre, textDecoration = TextDecoration.Underline)) { append(w) }
             i == state.speakingWord -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(w) }
             else -> append(w)
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CoachCard(state: ReaderState, onReplay: () -> Unit) {
     Spacer(Modifier.height(10.dp))
@@ -154,12 +159,12 @@ private fun CoachCard(state: ReaderState, onReplay: () -> Unit) {
         Modifier.fillMaxWidth().border(2.dp, InklingColors.Ink, RoundedCornerShape(12.dp))
             .clickable(onClick = onReplay).padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_speaker), contentDescription = null, tint = InklingColors.Ink, modifier = Modifier.size(22.dp))
                 Text("Let's sound it out:", fontFamily = Andika, fontSize = 17.sp, color = InklingColors.Ink)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.chunks.forEach { c ->
                     Box(
                         Modifier.border(2.dp, InklingColors.Ink, RoundedCornerShape(8.dp))
@@ -185,15 +190,14 @@ private fun PlainCard(text: String) {
 }
 
 @Composable
-private fun GoodCard(onNext: () -> Unit) {
-    Spacer(Modifier.height(10.dp))
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = TapTarget)
-            .background(InklingColors.Moss, RoundedCornerShape(12.dp))
-            .clickable(onClick = onNext).padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+private fun PageButton(label: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        modifier.heightIn(min = TapTarget)
+            .border(2.dp, if (enabled) InklingColors.Ink else InklingColors.Ink3, RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text("Nice reading!", fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = InklingColors.Ink)
-        Text("Next page ›", fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = InklingColors.Ink)
+        Text(label, fontFamily = Andika, fontWeight = FontWeight.Bold, fontSize = 17.sp,
+            color = if (enabled) InklingColors.Ink else InklingColors.Ink2)
     }
 }
